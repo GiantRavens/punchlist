@@ -38,6 +38,7 @@ func newInitCmd() *cobra.Command {
 			// write a default config
 			defaultConfig := &config.Config{
 				NextID:       1,
+				IDWidth:      config.DefaultIDWidth(),
 				LsStateOrder: config.DefaultLsStateOrder(),
 			}
 			if err := config.SaveConfig(defaultConfig); err != nil {

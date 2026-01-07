@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"punchlist/task"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,8 +21,20 @@ func findTaskFile(id int) (string, error) {
 	}
 
 	for _, file := range files {
-		if strings.HasPrefix(file.Name(), fmt.Sprintf("%06d", id)) {
-			return filepath.Join(tasksDir, file.Name()), nil
+		name := file.Name()
+		if !strings.HasSuffix(name, ".md") {
+			continue
+		}
+		prefix := strings.SplitN(name, "-", 2)[0]
+		if prefix == "" {
+			continue
+		}
+		parsedID, err := strconv.Atoi(prefix)
+		if err != nil {
+			continue
+		}
+		if parsedID == id {
+			return filepath.Join(tasksDir, name), nil
 		}
 	}
 

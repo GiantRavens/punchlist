@@ -52,7 +52,7 @@ func newShowCmd() *cobra.Command {
 			fmt.Printf("Path: %s\n", filepath.Clean(taskPath))
 
 			if t.Body != "" {
-				fmt.Printf("\n%s\n", t.Body)
+				fmt.Printf("\n-------\n%s\n", t.Body)
 			}
 		},
 	}

@@ -99,6 +99,10 @@ func newLsCmd() *cobra.Command {
 
 			// print aligned ids
 			idWidth := maxIDWidth(tasks)
+			configWidth := loadIDWidth()
+			if configWidth > idWidth {
+				idWidth = configWidth
+			}
 			for _, t := range tasks {
 				tagSuffix := ""
 				if len(t.Tags) > 0 {
@@ -171,6 +175,15 @@ func loadStateOrder() []string {
 		return config.DefaultLsStateOrder()
 	}
 	return cfg.LsStateOrder
+}
+
+// read id width from config
+func loadIDWidth() int {
+	cfg, err := config.LoadConfig()
+	if err != nil || cfg.IDWidth <= 0 {
+		return config.DefaultIDWidth()
+	}
+	return cfg.IDWidth
 }
 
 // build a lookup index from a state order list

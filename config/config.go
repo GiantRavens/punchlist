@@ -14,7 +14,13 @@ const PunchlistDir = ".punchlist"
 // config holds persisted settings for a punchlist scope
 type Config struct {
 	NextID       int      `yaml:"next_id"`
+	IDWidth      int      `yaml:"id_width,omitempty"`
 	LsStateOrder []string `yaml:"ls_state_order,omitempty"`
+}
+
+// default id width for filename padding
+func DefaultIDWidth() int {
+	return 3
 }
 
 // default state order for ls

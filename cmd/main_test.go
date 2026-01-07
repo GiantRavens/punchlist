@@ -113,7 +113,7 @@ func TestPinCmd(t *testing.T) {
 		}
 
 		// check that task file was created
-		taskFile := "tasks/000001-my-test-task.md"
+		taskFile := "tasks/001-my-test-task.md"
 		content, err := os.ReadFile(taskFile)
 		if err != nil {
 			t.Fatalf("Failed to read task file: %v", err)
@@ -153,7 +153,7 @@ func TestPinCmd(t *testing.T) {
 			t.Errorf("Expected success message for task 2, but got: %s", output)
 		}
 
-		taskFile := "tasks/000002-default-state-task.md"
+		taskFile := "tasks/002-default-state-task.md"
 		content, err := os.ReadFile(taskFile)
 		if err != nil {
 			t.Fatalf("Failed to read task file: %v", err)
@@ -176,16 +176,16 @@ func TestStateAndLsCmds(t *testing.T) {
 	os.MkdirAll(tasksDir, 0755)
 
 	task1 := &task.Task{ID: 1, Title: "Task 1", State: task.StateTodo, Priority: 1, Tags: []string{"team-a", "urgent"}}
-	task1.Write(filepath.Join(tasksDir, "000001-task-1.md"))
+	task1.Write(filepath.Join(tasksDir, "001-task-1.md"))
 
 	task2 := &task.Task{ID: 2, Title: "Task 2", State: task.StateBegun, Priority: 2, Tags: []string{"team-b"}}
-	task2.Write(filepath.Join(tasksDir, "000002-task-2.md"))
+	task2.Write(filepath.Join(tasksDir, "002-task-2.md"))
 
 	task3 := &task.Task{ID: 3, Title: "Task 3", State: task.StateTodo, Priority: 1, Tags: []string{"team-a"}}
-	task3.Write(filepath.Join(tasksDir, "000003-task-3.md"))
+	task3.Write(filepath.Join(tasksDir, "003-task-3.md"))
 
 	task4 := &task.Task{ID: 4, Title: "Task 4", State: task.StateBlock, Priority: 3, Tags: []string{"team-c"}}
-	task4.Write(filepath.Join(tasksDir, "000004-task-4.md"))
+	task4.Write(filepath.Join(tasksDir, "004-task-4.md"))
 
 	output, err := executeCommand("ls")
 	if err != nil {
@@ -265,7 +265,7 @@ func TestLogCmd(t *testing.T) {
 	}
 
 	// verify the log entry in the file
-	taskFile := "tasks/000001-my-log-test-task.md"
+	taskFile := "tasks/001-my-log-test-task.md"
 	content, err := os.ReadFile(taskFile)
 	if err != nil {
 		t.Fatalf("Failed to read task file: %v", err)
@@ -294,11 +294,11 @@ func TestDeleteCmd(t *testing.T) {
 		t.Errorf("Expected success message, but got: %s", output)
 	}
 
-	if _, err := os.Stat("tasks/000001-my-delete-task.md"); !os.IsNotExist(err) {
+	if _, err := os.Stat("tasks/001-my-delete-task.md"); !os.IsNotExist(err) {
 		t.Errorf("Expected task file to be removed, but it still exists")
 	}
 
-	if _, err := os.Stat(".trash/000001-my-delete-task.md"); err != nil {
+	if _, err := os.Stat(".trash/001-my-delete-task.md"); err != nil {
 		t.Errorf("Expected task file to be in trash, but got error: %v", err)
 	}
 }

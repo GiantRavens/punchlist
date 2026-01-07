@@ -78,3 +78,19 @@ pin del <ids>
 ```
 
 moves tasks to `.trash/` with a collision-safe filename.
+
+## Compact IDs
+
+```
+pin compact
+```
+
+reassigns task ids into a contiguous sequence and updates filenames and ids.
+each changed task gets a log entry noting the old and new id.
+
+## Config
+
+`.punchlist/config.yaml` supports:
+- `next_id`: next task id
+- `id_width`: zero padding width for filenames (default 3)
+- `ls_state_order`: custom state ordering for `pin ls`

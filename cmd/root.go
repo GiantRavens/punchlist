@@ -11,7 +11,7 @@ import (
 // build the root command and all subcommands
 func NewRootCmd() *cobra.Command {
 	// explain the tool up front in help output
-	longDesc := `Punchlist is a markdown-first task system. Each task is a single markdown file
+	longDesc := `Punchlist is a markdown-first task ticket system. Each task is a single markdown file
 with yaml frontmatter, kept in plain folders. The result is non-proprietary,
 easy to parse, and aligned with the markdown philosophy. It works great with
 Obsidian and any text-first workflow.
@@ -36,6 +36,7 @@ List and modify tasks:
   pin log 12 "sent draft to team"
   pin note 12 "ask for feedback from legal"
   pin del 12
+  pin compact
 
 Zsh cwd hook snippet (optional, for prompt or env):
   autoload -U add-zsh-hook
@@ -69,6 +70,7 @@ Zsh cwd hook snippet (optional, for prompt or env):
 	cmd.AddCommand(newBlockCmd())
 	cmd.AddCommand(newConfirmCmd())
 	cmd.AddCommand(newDeleteCmd())
+	cmd.AddCommand(newCompactCmd())
 	cmd.AddCommand(newLogCmd())
 	cmd.AddCommand(newDueCmd())
 	cmd.AddCommand(newNoteCmd())

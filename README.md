@@ -9,33 +9,19 @@
 
 # punchlist
 
-Punchlist is an open, markdown-native task system for people who prefer simple, powerful tools. Every task is a markdown file, easily parsed and edited with any tool like nvim or Obsidian.
-
-## How to build locally for testing
-
-Build a local binary for testing:
-
-```bash
-./scripts/build_binary.sh
-```
-
-Install it for system-wide use to `/usr/local/bin/pin`:
-
-```bash
-./scripts/install_binary.sh
-```
+Punchlist is an open, markdown-native task ticket system for people who prefer simple, powerful tools. Every task ticket is a markdown file, easily parsed and edited with tools like nvim or Obsidian.
 
 ## Make any folder a scoped task system:
 
-From within any folder, such as 'work' or 'home projects' initialize punchlist, then optionally hook punchlist task alerts in your shell.
+From within any folder, such as 'work' or 'home projects' initialize it as a punchlist project home.
 
-Initialize punchlist tasks in the current folder. This command will build a .punchlist directory that contains a basic config.yaml file, and a tasks/ folder that will contain markdown files, one markdown file per task. Each markdown task has YAML front-matter, and is easily editable and configurable in any editor, or via punchlists 'pin' command.
+`pin init` simple builds a .punchlist directory that contains a basic config.yaml file, and a tasks/ folder that will holds markdown files, one markdown file per task. Each markdown task has YAML front-matter, and is easily editable and configurable in any editor, or via punchlists 'pin' command.
 
 ```bash
 pin init
 ```
 
-Punchlists 'pin' command grammer is meant to be natural and tolerant.
+Punchlist's 'pin' command grammar is meant to be natural and tolerant.
 
 Examples of creating tasks:
 
@@ -81,7 +67,13 @@ Delete a Task (moves to `.trash/`):
 pin del 12
 ```
 
-## Selecting multiple tasks:
+Compact task IDs down (renumber all tasks to avoid large id gaps):
+
+```bash
+pin compact
+```
+
+## Select multiple tasks:
 
 You can pass multiple ids and ranges:
 
@@ -92,9 +84,9 @@ pin del "[2-3, 7]"
 
 note: zsh treats `[]` as glob patterns, so quote bracket selectors or use `noglob`.
 
-## Hooking punchlist into shell CWD for simple alerts
+## Automatically showing task counts when entering a punchlist capable folder:
 
-If you like, you can be alerted when CWD into a directory that is punchlist enabled - here's a simple starter example that give an old school mail alert on entering a punchlist directory with the task count:
+If you like, you can be alerted when move into a directory that is punchlist enabled - here's a simple starter example that give an old school mail alert on entering a punchlist directory with the task count:
 
 ```bash
 # punchlist notifier
@@ -150,6 +142,7 @@ _punchlist_maybe_notice() {
 - tasks live in `tasks/` as markdown files with yaml frontmatter.
 - config lives in `.punchlist/config.yaml`.
 - deleted tasks move to `.trash/`.
+- compacted tasks have their filenames renumbered, but a log entry is added noting the original and new id's
 
 ## Development
 
@@ -159,7 +152,7 @@ run tests:
 go test ./...
 ```
 
-for command grammar details, see `docs/grammar.md`.
+For command grammar details, see `docs/grammar.md`.
 
 ## Project
 
@@ -169,4 +162,3 @@ Punchlist is open source software.
 - Organization: Giant Ravens
 - License: MIT
 - Project home: https://github.com/GiantRavens/punchlist
-

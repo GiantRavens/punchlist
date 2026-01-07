@@ -59,7 +59,8 @@ func createTaskFromArgs(args []string) error {
 	id := cfg.NextID
 	// build file path
 	slug := slugify(title)
-	filename := fmt.Sprintf("%06d-%s.md", id, slug)
+	idWidth := idWidthFromConfig(cfg)
+	filename := fmt.Sprintf("%0*d-%s.md", idWidth, id, slug)
 
 	// this is a simplification. we should eventually get the tasks dir from config
 	tasksDir := "tasks"
@@ -95,6 +96,14 @@ func createTaskFromArgs(args []string) error {
 	}
 
 	return nil
+}
+
+// choose a safe id width from config or defaults
+func idWidthFromConfig(cfg *config.Config) int {
+	if cfg == nil || cfg.IDWidth <= 0 {
+		return config.DefaultIDWidth()
+	}
+	return cfg.IDWidth
 }
 
 // parse modifier tokens into options
