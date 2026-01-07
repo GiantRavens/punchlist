@@ -41,7 +41,6 @@ Examples of creating tasks:
 
 ```bash
 pin todo "write release plan" pri:1 by:2026-01-09 tags:{launch,pr}
-pin "default state is todo"
 ```
 
 Listing and inspecting tasks:
