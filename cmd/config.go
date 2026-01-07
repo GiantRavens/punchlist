@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// create the config command
 func newConfigCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
@@ -22,4 +23,3 @@ func newConfigCmd() *cobra.Command {
 	}
 	return cmd
 }
-

@@ -14,7 +14,7 @@ import (
 // setupTest creates a temporary directory for a test, changes into it, and returns a teardown function.
 func setupTest(t *testing.T) func() {
 	t.Helper()
-	// Correctly refer to the sandbox dir in the project root
+	// correctly refer to the sandbox dir in the project root
 	sandboxDir, err := filepath.Abs("../sandbox")
 	if err != nil {
 		t.Fatalf("Failed to get absolute path for sandbox: %v", err)
@@ -36,7 +36,7 @@ func setupTest(t *testing.T) func() {
 		t.Fatalf("Failed to change directory to %s: %v", testDir, err)
 	}
 
-	// Teardown function
+	// teardown function
 	return func() {
 		os.Chdir(originalWd)
 		os.RemoveAll(testDir)
@@ -60,6 +60,7 @@ func executeCommand(args ...string) (string, error) {
 	return buf.String(), err
 }
 
+// executeWithArgs runs cobra using provided args
 func executeWithArgs(args []string) error {
 	root := NewRootCmd()
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") && !isSubcommand(root, args[0]) {
@@ -69,6 +70,7 @@ func executeWithArgs(args []string) error {
 	return root.Execute()
 }
 
+// test init command behavior
 func TestInitCmd(t *testing.T) {
 	teardown := setupTest(t)
 	defer teardown()
@@ -82,24 +84,25 @@ func TestInitCmd(t *testing.T) {
 		t.Errorf("Expected success message, but got: %s", output)
 	}
 
-	// Check that .punchlist/config.yaml was created
+	// check that .punchlist/config.yaml was created
 	if _, err := os.Stat(filepath.Join(config.PunchlistDir, "config.yaml")); os.IsNotExist(err) {
 		t.Errorf(".punchlist/config.yaml was not created")
 	}
 }
 
+// test task creation via implicit pin
 func TestPinCmd(t *testing.T) {
 	teardown := setupTest(t)
 	defer teardown()
 
-	// Init project first
+	// init project first
 	_, err := executeCommand("init")
 	if err != nil {
 		t.Fatalf("init command failed: %v", err)
 	}
 
 	t.Run("creates a task with all modifiers", func(t *testing.T) {
-		// Run pin command
+		// run pin command
 		output, err := executeCommand("todo", "My test task", "pri:1", "due:2025-01-01", "tags:{test,important}")
 		if err != nil {
 			t.Fatalf("pin command failed: %v", err)
@@ -109,14 +112,14 @@ func TestPinCmd(t *testing.T) {
 			t.Errorf("Expected success message for task 1, but got: %s", output)
 		}
 
-		// Check that task file was created
+		// check that task file was created
 		taskFile := "tasks/000001-my-test-task.md"
 		content, err := os.ReadFile(taskFile)
 		if err != nil {
 			t.Fatalf("Failed to read task file: %v", err)
 		}
 
-		// Check for new data in the file content
+		// check for new data in the file content
 		if !strings.Contains(string(content), "state: TODO") {
 			t.Errorf("state was not set correctly in the task file")
 		}
@@ -130,7 +133,7 @@ func TestPinCmd(t *testing.T) {
 			t.Errorf("tags were not set correctly in the task file")
 		}
 
-		// Check that next_id was updated
+		// check that next_id was updated
 		cfg, err := config.LoadConfig()
 		if err != nil {
 			t.Fatalf("Failed to load config: %v", err)
@@ -162,11 +165,12 @@ func TestPinCmd(t *testing.T) {
 	})
 }
 
+// test state changes and ls filters
 func TestStateAndLsCmds(t *testing.T) {
 	teardown := setupTest(t)
 	defer teardown()
 
-	// 1. Init and create tasks manually
+	// init and create tasks manually
 	executeCommand("init")
 	tasksDir := "tasks"
 	os.MkdirAll(tasksDir, 0755)
@@ -189,7 +193,7 @@ func TestStateAndLsCmds(t *testing.T) {
 	}
 	t.Logf("ls output:\n%s", output)
 
-	// 2. Test ls with priority filter
+	// test ls with priority filter
 	output, err = executeCommand("ls", "--pri", "1")
 	if err != nil {
 		t.Fatalf("ls --pri command failed: %v", err)
@@ -204,7 +208,7 @@ func TestStateAndLsCmds(t *testing.T) {
 		t.Errorf("ls --pri=1 should contain Task 3. Got: %s", output)
 	}
 
-	// 3. Test ls with tag filter
+	// test ls with tag filter
 	output, err = executeCommand("ls", "--tag", "team-b")
 	if err != nil {
 		t.Fatalf("ls --tag command failed: %v", err)
@@ -216,7 +220,7 @@ func TestStateAndLsCmds(t *testing.T) {
 		t.Errorf("ls --tag=team-b should contain Task 2. Got: %s", output)
 	}
 
-	// 4. Test ls with multiple filters
+	// test ls with multiple filters
 	output, err = executeCommand("ls", "todo", "--pri", "1", "--tag", "urgent")
 	if err != nil {
 		t.Fatalf("ls with multiple filters failed: %v", err)
@@ -231,7 +235,7 @@ func TestStateAndLsCmds(t *testing.T) {
 		t.Errorf("ls with multiple filters should not contain Task 3. Got: %s", output)
 	}
 
-	// 5. Test ls with block state
+	// test ls with block state
 	output, err = executeCommand("ls", "block")
 	if err != nil {
 		t.Fatalf("ls block failed: %v", err)
@@ -241,15 +245,16 @@ func TestStateAndLsCmds(t *testing.T) {
 	}
 }
 
+// test log command behavior
 func TestLogCmd(t *testing.T) {
 	teardown := setupTest(t)
 	defer teardown()
 
-	// 1. Init and create a task
+	// init and create a task
 	executeCommand("init")
 	executeCommand("todo", "My log test task")
 
-	// 2. Add a log entry
+	// add a log entry
 	logMessage := "This is a test log message."
 	output, err := executeCommand("log", "1", logMessage)
 	if err != nil {
@@ -259,7 +264,7 @@ func TestLogCmd(t *testing.T) {
 		t.Errorf("Expected success message, but got: %s", output)
 	}
 
-	// 3. Verify the log entry in the file
+	// verify the log entry in the file
 	taskFile := "tasks/000001-my-log-test-task.md"
 	content, err := os.ReadFile(taskFile)
 	if err != nil {
@@ -273,6 +278,7 @@ func TestLogCmd(t *testing.T) {
 	}
 }
 
+// test delete command behavior
 func TestDeleteCmd(t *testing.T) {
 	teardown := setupTest(t)
 	defer teardown()

@@ -9,12 +9,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// create the log command
 func newLogCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "log [id] [message]",
 		Short: "Add a log entry to a task",
 		Args:  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
+			// parse input
 			idStr := args[0]
 			message := args[1]
 
@@ -36,6 +38,7 @@ func newLogCmd() *cobra.Command {
 				return
 			}
 
+			// add a timestamped entry
 			logEntry := fmt.Sprintf("- %s: %s", time.Now().Format(time.RFC3339), message)
 
 			pre, logSection, afterLog, found := splitSection(t.Body, "## Log")

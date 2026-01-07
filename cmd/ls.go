@@ -14,23 +14,28 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// create the ls command
 func newLsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ls [state]",
 		Short: "List tasks",
 		Long:  `List tasks, optionally filtering by state, priority, and tags.`,
+		ValidArgsFunction: stateArgCompletion,
 		Run: func(cmd *cobra.Command, args []string) {
+			// read filter and sort flags
 			lsPriority, _ := cmd.Flags().GetInt("pri")
 			lsTags, _ := cmd.Flags().GetStringSlice("tag")
 			lsOrder, _ := cmd.Flags().GetString("order")
 			lsReverse, _ := cmd.Flags().GetBool("reverse")
 
+			// scan tasks directory
 			tasksDir := "tasks"
 			if _, err := os.Stat(tasksDir); os.IsNotExist(err) {
 				fmt.Println("No tasks found.")
 				return
 			}
 
+			// parse optional state filter
 			var filterState task.State
 			if len(args) > 0 {
 				if parsed, ok := task.ParseState(args[0]); ok {
@@ -40,6 +45,7 @@ func newLsCmd() *cobra.Command {
 				}
 			}
 
+			// load tasks and apply filters
 			var tasks []*task.Task
 
 			err := filepath.WalkDir(tasksDir, func(path string, d fs.DirEntry, err error) error {
@@ -50,7 +56,7 @@ func newLsCmd() *cobra.Command {
 					t, err := task.Parse(path)
 					if err != nil {
 						fmt.Printf("Error parsing task file %s: %v\n", path, err)
-						return nil // Continue walking
+						return nil // continue walking
 					}
 
 					if filterState != "" && t.State != filterState {
@@ -78,10 +84,6 @@ func newLsCmd() *cobra.Command {
 						}
 					}
 
-					tagSuffix := ""
-					if len(t.Tags) > 0 {
-						tagSuffix = fmt.Sprintf("  {%s}", strings.Join(t.Tags, ","))
-					}
 					tasks = append(tasks, t)
 				}
 				return nil
@@ -92,14 +94,18 @@ func newLsCmd() *cobra.Command {
 				return
 			}
 
+			// order results
 			sortTasks(tasks, lsOrder, lsReverse)
 
+			// print aligned ids
+			idWidth := maxIDWidth(tasks)
 			for _, t := range tasks {
 				tagSuffix := ""
 				if len(t.Tags) > 0 {
 					tagSuffix = fmt.Sprintf(" {%s}", strings.Join(t.Tags, ","))
 				}
-				fmt.Printf("%d %s %s pri:%d due:%s%s\n",
+				fmt.Printf("%*d %s %s pri:%d due:%s%s\n",
+					idWidth,
 					t.ID,
 					t.State,
 					t.Title,
@@ -119,6 +125,7 @@ func newLsCmd() *cobra.Command {
 	return cmd
 }
 
+// render due dates consistently
 func formatDueDate(t *time.Time) string {
 	if t == nil {
 		return "n/a"
@@ -126,6 +133,7 @@ func formatDueDate(t *time.Time) string {
 	return t.Format("2006-01-02")
 }
 
+// sort tasks by the requested ordering
 func sortTasks(tasks []*task.Task, order string, reverse bool) {
 	order = strings.ToLower(strings.TrimSpace(order))
 	switch order {
@@ -156,6 +164,7 @@ func sortTasks(tasks []*task.Task, order string, reverse bool) {
 	}
 }
 
+// read state ordering from config
 func loadStateOrder() []string {
 	cfg, err := config.LoadConfig()
 	if err != nil || len(cfg.LsStateOrder) == 0 {
@@ -164,6 +173,7 @@ func loadStateOrder() []string {
 	return cfg.LsStateOrder
 }
 
+// build a lookup index from a state order list
 func buildStateOrderIndex(order []string) map[string]int {
 	index := make(map[string]int, len(order))
 	for i, label := range order {
@@ -189,10 +199,24 @@ func buildStateOrderIndex(order []string) map[string]int {
 	return index
 }
 
+// calculate width for right-aligned id output
+func maxIDWidth(tasks []*task.Task) int {
+	width := 1
+	for _, t := range tasks {
+		digits := len(fmt.Sprintf("%d", t.ID))
+		if digits > width {
+			width = digits
+		}
+	}
+	return width
+}
+
+// normalize for state ordering map keys
 func stateOrderKey(state task.State) string {
 	return strings.ToUpper(string(state))
 }
 
+// normalize state labels from config for ordering
 func normalizeOrderLabel(label string) (string, bool) {
 	switch strings.ToUpper(strings.TrimSpace(label)) {
 	case "TODO":

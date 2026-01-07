@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// state represents the canonical task state values
 type State string
 
 const (
@@ -22,6 +23,7 @@ const (
 	StateConfirm State = "CONFIRM"
 )
 
+// parse a state token into a canonical state
 func ParseState(input string) (State, bool) {
 	switch strings.ToUpper(strings.TrimSpace(input)) {
 	case string(StateTodo):
@@ -41,6 +43,7 @@ func ParseState(input string) (State, bool) {
 	}
 }
 
+// task is the canonical in-memory representation
 type Task struct {
 	ID           int        `yaml:"id"`
 	Title        string     `yaml:"title"`
@@ -56,8 +59,10 @@ type Task struct {
 	Body         string     `yaml:"-"`
 }
 
+// frontmatterSeparator defines yaml delimiters
 const frontmatterSeparator = "---"
 
+// parse reads a task file into a Task struct
 func Parse(filePath string) (*Task, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -70,11 +75,11 @@ func Parse(filePath string) (*Task, error) {
 	inFrontmatter := false
 	frontmatterClosed := false
 
-	// Check for initial separator
+	// check for initial separator
 	if scanner.Scan() && scanner.Text() == frontmatterSeparator {
 		inFrontmatter = true
 	} else {
-		// No frontmatter, treat entire file as body
+		// no frontmatter, treat entire file as body
 		bodyContent.WriteString(scanner.Text() + "\n")
 	}
 
@@ -107,10 +112,11 @@ func Parse(filePath string) (*Task, error) {
 	return &task, nil
 }
 
+// write serializes a Task back to disk
 func (t *Task) Write(filePath string) error {
 	var buf bytes.Buffer
 
-	// Write frontmatter
+	// write frontmatter
 	buf.WriteString(frontmatterSeparator + "\n")
 	encoder := yaml.NewEncoder(&buf)
 	encoder.SetIndent(2)
@@ -119,7 +125,7 @@ func (t *Task) Write(filePath string) error {
 	}
 	buf.WriteString(frontmatterSeparator + "\n")
 
-	// Write body
+	// write body
 	if t.Body != "" {
 		buf.WriteString("\n")
 		buf.WriteString(t.Body)

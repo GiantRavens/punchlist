@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// create the due command
 func newDueCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "due [id] [date]",
@@ -17,12 +18,14 @@ func newDueCmd() *cobra.Command {
 		Short:   "Set or change a task due date",
 		Args:    cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
+			// parse inputs
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
 				fmt.Printf("Invalid task ID: %v\n", err)
 				return
 			}
 
+			// support multi-word dates like "next tuesday"
 			dueInput := strings.Join(args[1:], " ")
 			dueTime, err := parseDue(dueInput)
 			if err != nil {
@@ -42,6 +45,7 @@ func newDueCmd() *cobra.Command {
 				return
 			}
 
+			// update task and append a log entry
 			now := time.Now()
 			prevDue := t.Due
 			t.Due = dueTime

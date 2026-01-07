@@ -9,12 +9,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// create the note command
 func newNoteCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "note [id] [message]",
 		Short: "Add a note to a task",
 		Args:  cobra.ExactArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
+			// parse input
 			idStr := args[0]
 			message := args[1]
 
@@ -36,6 +38,7 @@ func newNoteCmd() *cobra.Command {
 				return
 			}
 
+			// add a timestamped entry
 			noteEntry := fmt.Sprintf("- %s: %s", time.Now().Format(time.RFC3339), message)
 
 			pre, logSection, afterLog, logFound := splitSection(t.Body, "## Log")

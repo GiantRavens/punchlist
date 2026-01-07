@@ -8,17 +8,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// punchlist config directory name
 const PunchlistDir = ".punchlist"
 
+// config holds persisted settings for a punchlist scope
 type Config struct {
 	NextID       int      `yaml:"next_id"`
 	LsStateOrder []string `yaml:"ls_state_order,omitempty"`
 }
 
+// default state order for ls
 func DefaultLsStateOrder() []string {
 	return []string{"BEGUN", "BLOCK", "TODO", "CONFIRM", "DONE", "NOTDO"}
 }
 
+// find the nearest punchlist directory by walking parents
 func findPunchlistDir(startDir string) (string, error) {
 	currentDir := startDir
 	for {
@@ -35,6 +39,7 @@ func findPunchlistDir(startDir string) (string, error) {
 	}
 }
 
+// load config from the nearest punchlist directory
 func LoadConfig() (*Config, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -61,12 +66,13 @@ func LoadConfig() (*Config, error) {
 	return &cfg, nil
 }
 
+// save config to the nearest punchlist directory
 func SaveConfig(cfg *Config) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	// We assume .punchlist exists when saving.
+	// we assume .punchlist exists when saving.
 	punchlistPath, err := findPunchlistDir(cwd)
 	if err != nil {
 		return err

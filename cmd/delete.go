@@ -4,34 +4,42 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 )
 
+// create the delete command
 func newDeleteCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "del [id]",
 		Aliases: []string{"rm", "delete"},
 		Short:   "Move a task to the trash",
-		Args:    cobra.ExactArgs(1),
+		Args:    cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			if err := deleteTask(args[0]); err != nil {
-				fmt.Printf("Error deleting task: %v\n", err)
+			// parse one or many ids
+			ids, err := parseTaskIDs(args)
+			if err != nil {
+				fmt.Printf("Invalid task IDs: %v\n", err)
 				return
 			}
+			deleteTasks(ids)
 		},
 	}
 }
 
-func deleteTask(idStr string) error {
-	id, err := parseTaskID(idStr)
-	if err != nil {
-		return err
+// delete multiple tasks, reporting errors per id
+func deleteTasks(ids []int) {
+	for _, id := range ids {
+		if err := deleteTaskSingle(id); err != nil {
+			fmt.Printf("Error deleting task %d: %v\n", id, err)
+		}
 	}
+}
 
+// delete a single task by moving it to trash
+func deleteTaskSingle(id int) error {
 	taskPath, err := findTaskFile(id)
 	if err != nil {
 		return err
@@ -55,14 +63,7 @@ func deleteTask(idStr string) error {
 	return nil
 }
 
-func parseTaskID(idStr string) (int, error) {
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		return 0, fmt.Errorf("invalid task ID: %v", err)
-	}
-	return id, nil
-}
-
+// avoid name collisions in the trash directory
 func uniqueTrashPath(destPath string) string {
 	ext := filepath.Ext(destPath)
 	base := strings.TrimSuffix(filepath.Base(destPath), ext)

@@ -25,3 +25,8 @@ dist/
 ## Project data / sandbox
 tasks/
 sandbox/
+.punchlist/
+.trash/
+
+## local build output
+pin

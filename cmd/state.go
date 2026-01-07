@@ -5,13 +5,13 @@ import (
 	"os"
 	"path/filepath"
 	"punchlist/task"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 )
 
+// locate a task file by id prefix
 func findTaskFile(id int) (string, error) {
 	tasksDir := "tasks"
 	files, err := os.ReadDir(tasksDir)
@@ -28,83 +28,120 @@ func findTaskFile(id int) (string, error) {
 	return "", fmt.Errorf("task with ID %d not found", id)
 }
 
+// create the start command
 func newStartCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "start [id]",
 		Aliases: []string{"begun", "BEGUN", "START"},
 		Short:   "Start a task",
-		Args:    cobra.ExactArgs(1),
+		Args:    cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			updateTaskState(args[0], task.StateBegun)
+			// parse one or many ids
+			ids, err := parseTaskIDs(args)
+			if err != nil {
+				fmt.Printf("Invalid task IDs: %v\n", err)
+				return
+			}
+			updateTaskState(ids, task.StateBegun)
 		},
 	}
 }
 
+// create the done command
 func newDoneCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "done [id]",
 		Aliases: []string{"DONE"},
 		Short:   "Complete a task",
-		Args:    cobra.ExactArgs(1),
+		Args:    cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			updateTaskState(args[0], task.StateDone)
+			// parse one or many ids
+			ids, err := parseTaskIDs(args)
+			if err != nil {
+				fmt.Printf("Invalid task IDs: %v\n", err)
+				return
+			}
+			updateTaskState(ids, task.StateDone)
 		},
 	}
 }
 
+// create the notdo/defer command
 func newDeferCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "notdo [id]",
 		Aliases: []string{"defer", "NOTDO"},
 		Short:   "Mark a task as not to do",
-		Args:    cobra.ExactArgs(1),
+		Args:    cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			updateTaskState(args[0], task.StateNotDo)
+			// parse one or many ids
+			ids, err := parseTaskIDs(args)
+			if err != nil {
+				fmt.Printf("Invalid task IDs: %v\n", err)
+				return
+			}
+			updateTaskState(ids, task.StateNotDo)
 		},
 	}
 }
 
+// create the block command
 func newBlockCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "block [id]",
 		Aliases: []string{"BLOCK"},
-		Short:   "Block a task",
-		Args:    cobra.ExactArgs(1),
+		Short:   "Change a task's status to BLOCKED",
+		Args:    cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			updateTaskState(args[0], task.StateBlock)
+			// parse one or many ids
+			ids, err := parseTaskIDs(args)
+			if err != nil {
+				fmt.Printf("Invalid task IDs: %v\n", err)
+				return
+			}
+			updateTaskState(ids, task.StateBlock)
 		},
 	}
 }
 
+// create the confirm command
 func newConfirmCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "confirm [id]",
 		Aliases: []string{"CONFIRM"},
 		Short:   "Mark a task as needing confirmation",
-		Args:    cobra.ExactArgs(1),
+		Args:    cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			updateTaskState(args[0], task.StateConfirm)
+			// parse one or many ids
+			ids, err := parseTaskIDs(args)
+			if err != nil {
+				fmt.Printf("Invalid task IDs: %v\n", err)
+				return
+			}
+			updateTaskState(ids, task.StateConfirm)
 		},
 	}
 }
 
-func updateTaskState(idStr string, newState task.State) {
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		fmt.Printf("Invalid task ID: %v\n", err)
-		return
+// update multiple tasks to a new state
+func updateTaskState(ids []int, newState task.State) {
+	for _, id := range ids {
+		if err := updateTaskStateSingle(id, newState); err != nil {
+			fmt.Printf("Error updating task %d: %v\n", id, err)
+		}
 	}
+}
 
+// update a single task's state and timestamps
+func updateTaskStateSingle(id int, newState task.State) error {
 	taskPath, err := findTaskFile(id)
 	if err != nil {
-		fmt.Printf("Error finding task: %v\n", err)
-		return
+		return err
 	}
 
 	t, err := task.Parse(taskPath)
 	if err != nil {
-		fmt.Printf("Error parsing task: %v\n", err)
-		return
+		return err
 	}
 
 	t.State = newState
@@ -118,9 +155,9 @@ func updateTaskState(idStr string, newState task.State) {
 	}
 
 	if err := t.Write(taskPath); err != nil {
-		fmt.Printf("Error updating task: %v\n", err)
-		return
+		return err
 	}
 
 	fmt.Printf("Task %d moved to %s\n", id, newState)
+	return nil
 }

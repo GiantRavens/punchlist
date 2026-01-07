@@ -12,12 +12,14 @@ import (
 	"time"
 )
 
+// options extracted from creation modifiers
 type createOptions struct {
 	priority int
 	due      *time.Time
 	tags     []string
 }
 
+// create a task from free-form args
 func createTaskFromArgs(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("missing title")
@@ -28,6 +30,7 @@ func createTaskFromArgs(args []string) error {
 		mods  []string
 	)
 
+	// parse optional leading state
 	if parsed, ok := task.ParseState(args[0]); ok {
 		state = parsed
 		args = args[1:]
@@ -35,32 +38,37 @@ func createTaskFromArgs(args []string) error {
 		state = task.StateTodo
 	}
 
+	// split title from modifiers
 	title, mods, err := splitTitleAndModifiers(args)
 	if err != nil {
 		return err
 	}
 
+	// parse modifiers into options
 	opts, err := parseCreateModifiers(mods)
 	if err != nil {
 		return err
 	}
 
+	// load config and increment id
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		return fmt.Errorf("error loading config: %w", err)
 	}
 
 	id := cfg.NextID
+	// build file path
 	slug := slugify(title)
 	filename := fmt.Sprintf("%06d-%s.md", id, slug)
 
-	// This is a simplification. We should eventually get the tasks dir from config
+	// this is a simplification. we should eventually get the tasks dir from config
 	tasksDir := "tasks"
 	if err := os.MkdirAll(tasksDir, 0755); err != nil {
 		return fmt.Errorf("error creating tasks directory: %w", err)
 	}
 	filePath := filepath.Join(tasksDir, filename)
 
+	// assemble the task object
 	newTask := &task.Task{
 		ID:        id,
 		Title:     title,
@@ -71,6 +79,7 @@ func createTaskFromArgs(args []string) error {
 		UpdatedAt: time.Now(),
 		Due:       opts.due,
 	}
+	// use a default h1 body
 	newTask.Body = fmt.Sprintf("# %s\n", title)
 
 	if err := newTask.Write(filePath); err != nil {
@@ -79,7 +88,7 @@ func createTaskFromArgs(args []string) error {
 
 	fmt.Printf("Created task %d: %s\n", id, filePath)
 
-	// Increment and save the next ID
+	// increment and save the next id
 	cfg.NextID++
 	if err := config.SaveConfig(cfg); err != nil {
 		return fmt.Errorf("error saving config: %w", err)
@@ -88,6 +97,7 @@ func createTaskFromArgs(args []string) error {
 	return nil
 }
 
+// parse modifier tokens into options
 func parseCreateModifiers(args []string) (createOptions, error) {
 	opts := createOptions{}
 	for _, arg := range args {
@@ -125,6 +135,7 @@ func parseCreateModifiers(args []string) (createOptions, error) {
 	return opts, nil
 }
 
+// split args into a title and key:value modifiers
 func splitTitleAndModifiers(args []string) (string, []string, error) {
 	if len(args) == 0 {
 		return "", nil, fmt.Errorf("missing title")
@@ -178,6 +189,7 @@ func splitTitleAndModifiers(args []string) (string, []string, error) {
 	return title, mods, nil
 }
 
+// parse modifier tokens in key:value or key value form
 func parseModifierToken(token string) (key, value string, ok bool, inline bool) {
 	parts := strings.SplitN(token, ":", 2)
 	if len(parts) == 2 {
@@ -194,6 +206,7 @@ func parseModifierToken(token string) (key, value string, ok bool, inline bool) 
 	return "", "", false, false
 }
 
+// normalize modifier keys to canonical names
 func normalizeModifierKey(key string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(key)) {
 	case "pri", "priority":
@@ -207,6 +220,7 @@ func normalizeModifierKey(key string) (string, bool) {
 	}
 }
 
+// parse tag lists in {a,b,c} format
 func parseTags(value string) []string {
 	trimmed := strings.TrimSpace(value)
 	trimmed = strings.TrimPrefix(trimmed, "{")
@@ -226,17 +240,20 @@ func parseTags(value string) []string {
 	return tags
 }
 
+// parse due dates in natural and structured formats
 func parseDue(value string) (*time.Time, error) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
 		return nil, fmt.Errorf("invalid due date: %s", value)
 	}
 
+	// try natural language shortcuts first
 	now := time.Now()
 	if parsed, ok := parseDueNatural(trimmed, now); ok {
 		return &parsed, nil
 	}
 
+	// parse date-only formats at noon local time
 	loc := now.Location()
 	dateOnlyLayouts := []string{
 		"2006-01-02",
@@ -249,6 +266,7 @@ func parseDue(value string) (*time.Time, error) {
 		}
 	}
 
+	// parse date-time formats with local time zone
 	dateTimeLayouts := []string{
 		"2006-01-02T15:04",
 		"2006-01-02T15:04:05",
@@ -260,6 +278,7 @@ func parseDue(value string) (*time.Time, error) {
 		}
 	}
 
+	// fall back to rfc3339
 	if parsed, err := time.Parse(time.RFC3339, trimmed); err == nil {
 		return &parsed, nil
 	}
@@ -267,6 +286,7 @@ func parseDue(value string) (*time.Time, error) {
 	return nil, fmt.Errorf("invalid due date: %s", value)
 }
 
+// parse a small set of natural date tokens
 func parseDueNatural(input string, now time.Time) (time.Time, bool) {
 	normalized := strings.ToLower(strings.TrimSpace(input))
 	if normalized == "" {
@@ -295,6 +315,7 @@ func parseDueNatural(input string, now time.Time) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// map weekday strings to time.Weekday
 func parseWeekday(input string) (time.Weekday, bool) {
 	switch input {
 	case "sun", "sunday":
@@ -316,6 +337,7 @@ func parseWeekday(input string) (time.Weekday, bool) {
 	}
 }
 
+// compute the next matching weekday at noon
 func nextWeekdayAtNoon(now time.Time, weekday time.Weekday, forceNextWeek bool) time.Time {
 	daysAhead := (int(weekday) - int(now.Weekday()) + 7) % 7
 	if forceNextWeek && daysAhead == 0 {
@@ -324,11 +346,13 @@ func nextWeekdayAtNoon(now time.Time, weekday time.Weekday, forceNextWeek bool) 
 	return dateAtNoon(now, daysAhead)
 }
 
+// normalize a date to noon local time
 func dateAtNoon(now time.Time, addDays int) time.Time {
 	target := now.AddDate(0, 0, addDays)
 	return time.Date(target.Year(), target.Month(), target.Day(), 12, 0, 0, 0, target.Location())
 }
 
+// generate a filename-safe slug
 func slugify(s string) string {
 	s = strings.ToLower(s)
 	re := regexp.MustCompile("[^a-z0-9]+")

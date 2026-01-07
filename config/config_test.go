@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// test punchlist dir discovery
 func TestFindPunchlistDir(t *testing.T) {
 	sandboxDir, err := filepath.Abs("sandbox")
 	if err != nil {
@@ -16,7 +17,7 @@ func TestFindPunchlistDir(t *testing.T) {
 	}
 	defer os.RemoveAll(sandboxDir)
 
-	// Test case 1: .punchlist in current directory
+	// test case 1: .punchlist in current directory
 	t.Run("finds .punchlist in current dir", func(t *testing.T) {
 		testDir := filepath.Join(sandboxDir, "test1")
 		punchlistDir := filepath.Join(testDir, PunchlistDir)
@@ -33,7 +34,7 @@ func TestFindPunchlistDir(t *testing.T) {
 		}
 	})
 
-	// Test case 2: .punchlist in parent directory
+	// test case 2: .punchlist in parent directory
 	t.Run("finds .punchlist in parent dir", func(t *testing.T) {
 		parentDir := filepath.Join(sandboxDir, "test2")
 		punchlistDir := filepath.Join(parentDir, PunchlistDir)
@@ -54,7 +55,7 @@ func TestFindPunchlistDir(t *testing.T) {
 		}
 	})
 
-	// Test case 3: No .punchlist directory
+	// test case 3: no .punchlist directory
 	t.Run("returns error when no .punchlist dir", func(t *testing.T) {
 		testDir := filepath.Join(sandboxDir, "test3")
 		if err := os.MkdirAll(testDir, 0755); err != nil {
@@ -68,6 +69,7 @@ func TestFindPunchlistDir(t *testing.T) {
 	})
 }
 
+// test load and save config round-trip
 func TestLoadAndSaveConfig(t *testing.T) {
 	sandboxDir, err := filepath.Abs("sandbox")
 	if err != nil {
@@ -83,8 +85,7 @@ func TestLoadAndSaveConfig(t *testing.T) {
 	if err := os.MkdirAll(punchlistDir, 0755); err != nil {
 		t.Fatalf("Failed to create test dir: %v", err)
 	}
-	
-	// Change to the test directory to test relative paths
+	// change to the test directory to test relative paths
 	originalWd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get current working directory: %v", err)
@@ -93,8 +94,6 @@ func TestLoadAndSaveConfig(t *testing.T) {
 		t.Fatalf("Failed to change directory to %s: %v", testDir, err)
 	}
 	defer os.Chdir(originalWd)
-
-
 	t.Run("loads a saved config", func(t *testing.T) {
 		cfg := &Config{NextID: 42}
 		if err := SaveConfig(cfg); err != nil {
@@ -112,7 +111,7 @@ func TestLoadAndSaveConfig(t *testing.T) {
 	})
 
 	t.Run("load returns error if config does not exist", func(t *testing.T) {
-		// Make sure config file is not there
+		// make sure config file is not there
 		os.Remove(filepath.Join(punchlistDir, "config.yaml"))
 		_, err := LoadConfig()
 		if err == nil {

@@ -11,12 +11,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// create the show command
 func newShowCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "show [id]",
 		Short: "Show a task in detail",
 		Args:  cobra.ExactArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
+			// parse id and load task
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
 				fmt.Printf("Invalid task ID: %v\n", err)
@@ -35,6 +37,7 @@ func newShowCmd() *cobra.Command {
 				return
 			}
 
+			// print task details
 			fmt.Printf("ID: %d\n", t.ID)
 			fmt.Printf("Title: %s\n", t.Title)
 			fmt.Printf("State: %s\n", t.State)
@@ -55,6 +58,7 @@ func newShowCmd() *cobra.Command {
 	}
 }
 
+// render optional timestamps consistently
 func formatOptionalTime(t *time.Time) string {
 	if t == nil {
 		return "n/a"
@@ -62,6 +66,7 @@ func formatOptionalTime(t *time.Time) string {
 	return t.Format(time.RFC3339)
 }
 
+// format string slices for display
 func formatList(items []string) string {
 	if len(items) == 0 {
 		return "-"
