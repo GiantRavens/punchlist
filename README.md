@@ -1,6 +1,15 @@
+```
+  o
++--\----+
+|   \   |
+| punch |
+|  list |
++-------+
+```
+
 # punchlist
 
-Punchlist is an open, markdown-native task system for people who prefer simple, powerful tools. Every task is a markdown file, easily parsed and edited with any tools like Obsidian.
+Punchlist is an open, markdown-native task system for people who prefer simple, powerful tools. Every task is a markdown file, easily parsed and edited with any tool like nvim or Obsidian.
 
 ## How to build locally for testing
 
@@ -16,7 +25,7 @@ Install it for system-wide use to `/usr/local/bin/pin`:
 ./scripts/install_binary.sh
 ```
 
-## Make any folder a scoped task system.
+## Make any folder a scoped task system:
 
 From within any folder, such as 'work' or 'home projects' initialize punchlist, then optionally hook punchlist task alerts in your shell.
 
@@ -152,7 +161,6 @@ go test ./...
 ```
 
 for command grammar details, see `docs/grammar.md`.
-
 
 ## Project
 
