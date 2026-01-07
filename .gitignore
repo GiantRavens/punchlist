@@ -1,0 +1,27 @@
+## Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.a
+*.o
+*.obj
+*.cache
+
+## Go coverage / profiling
+*.cover
+*.prof
+
+## Go tooling output
+bin/
+dist/
+
+## macOS
+.DS_Store
+
+## Project data / sandbox
+tasks/
+sandbox/
