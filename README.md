@@ -92,7 +92,7 @@ pin del "[2-3, 7]"
 
 note: zsh treats `[]` as glob patterns, so quote bracket selectors or use `noglob`.
 
-## Hooking punchlist into shell completion
+## Hooking punchlist into shell CWD for simple alerts
 
 If you like, you can be alerted when CWD into a directory that is punchlist enabled - here's a simple starter example that give an old school mail alert on entering a punchlist directory with the task count:
 
@@ -168,4 +168,5 @@ Punchlist is open source software.
 - Author: Skip Levens
 - Organization: Giant Ravens
 - License: MIT
-- Project home: https://github.com/giant-ravens/punchlist
+- Project home: https://github.com/GiantRavens/punchlist
+
