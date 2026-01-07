@@ -88,7 +88,7 @@ note: zsh treats `[]` as glob patterns, so quote bracket selectors or use `noglo
 
 ## Automatically showing task counts when entering a punchlist capable folder:
 
-If you like, you can be alerted when move into a directory that is punchlist enabled - here's a simple starter example that give an old school mail alert on entering a punchlist directory with the task count:
+If you like, you can be alerted when you move into a directory that is punchlist enabled - here's a simple starter example that gives an old school mail alert on entering a punchlist-enabled directory:
 
 ```bash
 # punchlist notifier
