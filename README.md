@@ -9,17 +9,19 @@
 
 # punchlist
 
-Punchlist is an open, markdown-native task ticket system for people who prefer simple, powerful tools. Every task ticket is a markdown file, easily parsed and edited with tools like nvim or Obsidian.
+Punchlist is an open, transparent, markdown-native task ticket system. Every TODO/task is a markdown file, easily parsed and edited with tools like nvim or Obsidian.
 
-## Make any folder a scoped task system:
+## Make any folder a scoped task system
 
-From within any folder, such as 'work' or 'home projects' initialize it as a punchlist project home.
-
-`pin init` simple builds a .punchlist directory that contains a basic config.yaml file, and a tasks/ folder that will holds markdown files, one markdown file per task. Each markdown task has YAML front-matter, and is easily editable and configurable in any editor, or via punchlists 'pin' command.
+From within any folder, such as 'work' or 'home projects' use `pin init` to initialize it as a punchlist project home. 
 
 ```bash
 pin init
 ```
+
+`pin init` simply builds a .punchlist directory with a basic config.yaml file, adds a tasks/ folder that holds markdown files, one markdown file per task. 
+
+Each markdown task has YAML front-matter, and is easily editable and configurable in any editor, or modified with punchlist's 'pin' command.
 
 Punchlist's 'pin' command grammar is meant to be natural and tolerant.
 
