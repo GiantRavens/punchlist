@@ -25,6 +25,7 @@ dist/
 ## Project data / sandbox
 tasks/
 sandbox/
+.serena/
 .punchlist/
 .trash/
 

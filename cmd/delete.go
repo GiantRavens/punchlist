@@ -45,12 +45,15 @@ func deleteTaskSingle(id int) error {
 		return err
 	}
 
-	trashDir := ".trash"
-	if err := os.MkdirAll(trashDir, 0755); err != nil {
+	trashPath, err := trashDir()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(trashPath, 0755); err != nil {
 		return fmt.Errorf("failed to create trash directory: %w", err)
 	}
 
-	destPath := filepath.Join(trashDir, filepath.Base(taskPath))
+	destPath := filepath.Join(trashPath, filepath.Base(taskPath))
 	if _, err := os.Stat(destPath); err == nil {
 		destPath = uniqueTrashPath(destPath)
 	}

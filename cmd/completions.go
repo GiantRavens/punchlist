@@ -113,14 +113,17 @@ func taskIDCompletions(stateOrder []task.State, toComplete string) []cobra.Compl
 
 // load tasks grouped by state from the tasks directory
 func loadTasksByState() map[task.State][]*task.Task {
-	tasksDir := "tasks"
-	info, err := os.Stat(tasksDir)
+	tasksPath, err := tasksDir()
+	if err != nil {
+		return nil
+	}
+	info, err := os.Stat(tasksPath)
 	if err != nil || !info.IsDir() {
 		return nil
 	}
 
 	tasksByState := make(map[task.State][]*task.Task)
-	_ = filepath.WalkDir(tasksDir, func(path string, d os.DirEntry, err error) error {
+	_ = filepath.WalkDir(tasksPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}

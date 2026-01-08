@@ -14,8 +14,11 @@ import (
 
 // locate a task file by id prefix
 func findTaskFile(id int) (string, error) {
-	tasksDir := "tasks"
-	files, err := os.ReadDir(tasksDir)
+	tasksPath, err := tasksDir()
+	if err != nil {
+		return "", err
+	}
+	files, err := os.ReadDir(tasksPath)
 	if err != nil {
 		return "", err
 	}
@@ -34,7 +37,7 @@ func findTaskFile(id int) (string, error) {
 			continue
 		}
 		if parsedID == id {
-			return filepath.Join(tasksDir, name), nil
+			return filepath.Join(tasksPath, name), nil
 		}
 	}
 

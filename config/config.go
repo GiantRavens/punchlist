@@ -39,10 +39,24 @@ func findPunchlistDir(startDir string) (string, error) {
 		}
 		parent := filepath.Dir(currentDir)
 		if parent == currentDir {
-			return "", fmt.Errorf("could not find a %s directory in the current directory or any of its parents. please run 'punchlist init'", PunchlistDir)
+			return "", fmt.Errorf("could not find a %s directory in the current directory or any of its parents. please run 'pin init'", PunchlistDir)
 		}
 		currentDir = parent
 	}
+}
+
+func FindPunchlistRoot() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("could not get current working directory: %w", err)
+	}
+
+	punchlistPath, err := findPunchlistDir(cwd)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Dir(punchlistPath), nil
 }
 
 // load config from the nearest punchlist directory
@@ -60,7 +74,7 @@ func LoadConfig() (*Config, error) {
 	configPath := filepath.Join(punchlistPath, "config.yaml")
 	f, err := os.Open(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("could not open config file: %w. please run 'punchlist init'", err)
+		return nil, fmt.Errorf("could not open config file: %w. please run 'pin init'", err)
 	}
 	defer f.Close()
 

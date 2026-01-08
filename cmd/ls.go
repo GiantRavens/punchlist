@@ -17,9 +17,9 @@ import (
 // create the ls command
 func newLsCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "ls [state]",
-		Short: "List tasks",
-		Long:  `List tasks, optionally filtering by state, priority, and tags.`,
+		Use:               "ls [state]",
+		Short:             "List tasks",
+		Long:              `List tasks, optionally filtering by state, priority, and tags.`,
 		ValidArgsFunction: stateArgCompletion,
 		Run: func(cmd *cobra.Command, args []string) {
 			// read filter and sort flags
@@ -29,8 +29,12 @@ func newLsCmd() *cobra.Command {
 			lsReverse, _ := cmd.Flags().GetBool("reverse")
 
 			// scan tasks directory
-			tasksDir := "tasks"
-			if _, err := os.Stat(tasksDir); os.IsNotExist(err) {
+			tasksPath, err := tasksDir()
+			if err != nil {
+				fmt.Printf("Error locating tasks: %v\n", err)
+				return
+			}
+			if _, err := os.Stat(tasksPath); os.IsNotExist(err) {
 				fmt.Println("No tasks found.")
 				return
 			}
@@ -48,7 +52,7 @@ func newLsCmd() *cobra.Command {
 			// load tasks and apply filters
 			var tasks []*task.Task
 
-			err := filepath.WalkDir(tasksDir, func(path string, d fs.DirEntry, err error) error {
+			err = filepath.WalkDir(tasksPath, func(path string, d fs.DirEntry, err error) error {
 				if err != nil {
 					return err
 				}

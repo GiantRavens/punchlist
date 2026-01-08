@@ -62,12 +62,14 @@ func createTaskFromArgs(args []string) error {
 	idWidth := idWidthFromConfig(cfg)
 	filename := fmt.Sprintf("%0*d-%s.md", idWidth, id, slug)
 
-	// this is a simplification. we should eventually get the tasks dir from config
-	tasksDir := "tasks"
-	if err := os.MkdirAll(tasksDir, 0755); err != nil {
+	tasksPath, err := tasksDir()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(tasksPath, 0755); err != nil {
 		return fmt.Errorf("error creating tasks directory: %w", err)
 	}
-	filePath := filepath.Join(tasksDir, filename)
+	filePath := filepath.Join(tasksPath, filename)
 
 	// assemble the task object
 	newTask := &task.Task{

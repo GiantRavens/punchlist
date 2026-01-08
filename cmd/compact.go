@@ -37,7 +37,11 @@ func newCompactCmd() *cobra.Command {
 
 // compact tasks to contiguous ids, updating filenames and frontmatter
 func compactTasks() error {
-	entries, err := loadCompactEntries()
+	tasksPath, err := tasksDir()
+	if err != nil {
+		return err
+	}
+	entries, err := loadCompactEntries(tasksPath)
 	if err != nil {
 		return err
 	}
@@ -89,7 +93,7 @@ func compactTasks() error {
 		entry.task.UpdatedAt = now
 		entry.task.Body = appendCompactLog(entry.task.Body, entry.oldID, entry.newID, now)
 
-		newPath := compactTargetPath(entry.task, entry.suffix, entry.newID, idWidth)
+		newPath := compactTargetPath(tasksPath, entry.task, entry.suffix, entry.newID, idWidth)
 		if err := entry.task.Write(newPath); err != nil {
 			return fmt.Errorf("failed to write %s: %w", newPath, err)
 		}
@@ -110,15 +114,14 @@ func compactTasks() error {
 }
 
 // load all tasks and prep compact entries
-func loadCompactEntries() ([]compactEntry, error) {
-	tasksDir := "tasks"
-	info, err := os.Stat(tasksDir)
+func loadCompactEntries(tasksPath string) ([]compactEntry, error) {
+	info, err := os.Stat(tasksPath)
 	if err != nil || !info.IsDir() {
 		return nil, nil
 	}
 
 	entries := []compactEntry{}
-	err = filepath.WalkDir(tasksDir, func(path string, d os.DirEntry, err error) error {
+	err = filepath.WalkDir(tasksPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -155,12 +158,12 @@ func loadCompactEntries() ([]compactEntry, error) {
 }
 
 // build a new path using configured width and existing suffix
-func compactTargetPath(t *task.Task, suffix string, newID int, idWidth int) string {
+func compactTargetPath(tasksPath string, t *task.Task, suffix string, newID int, idWidth int) string {
 	if suffix == "" {
 		suffix = slugify(t.Title)
 	}
 	filename := fmt.Sprintf("%0*d-%s.md", idWidth, newID, suffix)
-	return filepath.Join("tasks", filename)
+	return filepath.Join(tasksPath, filename)
 }
 
 // derive a filename suffix from the existing filename or title
