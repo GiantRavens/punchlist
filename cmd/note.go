@@ -28,6 +28,9 @@ func newNoteCmd() *cobra.Command {
 
 			taskPath, err := findTaskFile(id)
 			if err != nil {
+				if printNotPunchlistError(err) {
+					return
+				}
 				fmt.Printf("Error finding task: %v\n", err)
 				return
 			}

@@ -28,9 +28,11 @@ Examples:
   pin todo "send pr draft" by:2026-01-15
   pin todo "ship notes" by:tomorrow
   pin todo "review plan" by:friday
+  pin todo ../work "queue follow-up"
 
 List and modify tasks:
   pin ls
+  pin ls ../work
   pin ls todo --tag launch
   pin due 12 "next tuesday"
   pin log 12 "sent draft to team"
@@ -92,6 +94,9 @@ func Execute() {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") && !isSubcommand(root, args[0]) && !isCobraCompletionCmd(args[0]) {
 		// treat bare args as task creation
 		if err := createTaskFromArgs(args); err != nil {
+			if printNotPunchlistError(err) {
+				os.Exit(1)
+			}
 			fmt.Fprintf(os.Stderr, "Whoops. There was an error while executing your CLI '%s'", err)
 			os.Exit(1)
 		}
@@ -100,6 +105,9 @@ func Execute() {
 
 	// run cobra command execution
 	if err := root.Execute(); err != nil {
+		if printNotPunchlistError(err) {
+			os.Exit(1)
+		}
 		fmt.Fprintf(os.Stderr, "Whoops. There was an error while executing your CLI '%s'", err)
 		os.Exit(1)
 	}

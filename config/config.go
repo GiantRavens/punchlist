@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,9 @@ import (
 
 // punchlist config directory name
 const PunchlistDir = ".punchlist"
+
+// ErrPunchlistNotFound indicates no punchlist directory exists in scope.
+var ErrPunchlistNotFound = errors.New("punchlist directory not found")
 
 // config holds persisted settings for a punchlist scope
 type Config struct {
@@ -38,7 +42,7 @@ func findPunchlistDir(startDir string) (string, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return "", fmt.Errorf("could not access %s directory: %w", PunchlistDir, err)
 	}
-	return "", fmt.Errorf("could not find a %s directory in the current directory. please run 'pin init'", PunchlistDir)
+	return "", ErrPunchlistNotFound
 }
 
 func FindPunchlistRoot() (string, error) {

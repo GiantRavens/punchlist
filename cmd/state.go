@@ -143,6 +143,9 @@ func newConfirmCmd() *cobra.Command {
 func updateTaskState(ids []int, newState task.State) {
 	for _, id := range ids {
 		if err := updateTaskStateSingle(id, newState); err != nil {
+			if printNotPunchlistError(err) {
+				return
+			}
 			fmt.Printf("Error updating task %d: %v\n", id, err)
 		}
 	}

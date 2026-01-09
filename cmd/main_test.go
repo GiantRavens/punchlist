@@ -172,6 +172,38 @@ func TestPinCmd(t *testing.T) {
 			t.Errorf("default state was not set correctly in the task file")
 		}
 	})
+
+	t.Run("creates a task in another directory by path", func(t *testing.T) {
+		sandboxDir, err := filepath.Abs("../sandbox")
+		if err != nil {
+			t.Fatalf("Failed to get sandbox dir: %v", err)
+		}
+		otherDir, err := os.MkdirTemp(sandboxDir, "other-*")
+		if err != nil {
+			t.Fatalf("Failed to create other dir: %v", err)
+		}
+		t.Cleanup(func() { os.RemoveAll(otherDir) })
+
+		if err := withWorkingDir(otherDir, func() error {
+			_, err := executeCommand("init")
+			return err
+		}); err != nil {
+			t.Fatalf("init command failed in other dir: %v", err)
+		}
+
+		output, err := executeCommand("todo", otherDir, "Path task")
+		if err != nil {
+			t.Fatalf("pin command failed: %v", err)
+		}
+		if !strings.Contains(output, "Created task 1:") {
+			t.Errorf("Expected success message for path task, but got: %s", output)
+		}
+
+		taskFile := filepath.Join(otherDir, "tasks", "001-path-task.md")
+		if _, err := os.Stat(taskFile); err != nil {
+			t.Fatalf("Failed to stat task file: %v", err)
+		}
+	})
 }
 
 // test state changes and ls filters
@@ -334,5 +366,39 @@ func TestDeleteCmd(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(trashPath, "001-my-delete-task.md")); err != nil {
 		t.Errorf("Expected task file to be in trash, but got error: %v", err)
+	}
+}
+
+func TestLsPathTarget(t *testing.T) {
+	teardown := setupTest(t)
+	defer teardown()
+
+	sandboxDir, err := filepath.Abs("../sandbox")
+	if err != nil {
+		t.Fatalf("Failed to get sandbox dir: %v", err)
+	}
+	otherDir, err := os.MkdirTemp(sandboxDir, "other-*")
+	if err != nil {
+		t.Fatalf("Failed to create other dir: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(otherDir) })
+
+	if err := withWorkingDir(otherDir, func() error {
+		_, err := executeCommand("init")
+		if err != nil {
+			return err
+		}
+		_, err = executeCommand("todo", "Other task")
+		return err
+	}); err != nil {
+		t.Fatalf("Failed to setup other dir tasks: %v", err)
+	}
+
+	output, err := executeCommand("ls", otherDir)
+	if err != nil {
+		t.Fatalf("ls with path failed: %v", err)
+	}
+	if !strings.Contains(output, "Other task") {
+		t.Errorf("ls with path should include task from target dir. Got: %s", output)
 	}
 }

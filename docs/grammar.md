@@ -5,10 +5,11 @@ the cli uses a small, sentence-like grammar.
 ## Creating a Task
 
 ```
-pin [state] <title> [modifiers...]
+pin [state] [path] <title> [modifiers...]
 ```
 
 state defaults to `TODO` when omitted.
+path is optional and must start with `.` or `/` (example: `../work`).
 
 modifiers:
 - `pri:<int>` or `priority:<int>`
@@ -25,10 +26,11 @@ pin "default todo task"
 ## Listing Tasks
 
 ```
-pin ls [state] [flags]
+pin ls [path] [state] [flags]
 ```
 
 state can be any task state (TODO, BEGUN, BLOCK, CONFIRM, DONE, NOTDO).
+path is optional and must start with `.` or `/`.
 
 flags:
 - `--pri <int>`

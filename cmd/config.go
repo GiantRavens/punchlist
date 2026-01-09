@@ -15,6 +15,9 @@ func newConfigCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			cfg, err := config.LoadConfig()
 			if err != nil {
+				if printNotPunchlistError(err) {
+					return
+				}
 				fmt.Printf("Error loading config: %v\n", err)
 				return
 			}

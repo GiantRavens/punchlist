@@ -21,6 +21,23 @@ type createOptions struct {
 
 // create a task from free-form args
 func createTaskFromArgs(args []string) error {
+	targetPath, remaining := extractTargetPath(args)
+	if len(remaining) == 0 {
+		return fmt.Errorf("missing title")
+	}
+	if targetPath == "" {
+		return createTaskFromArgsInDir(remaining)
+	}
+	root, err := punchlistRootFromPath(targetPath)
+	if err != nil {
+		return err
+	}
+	return withWorkingDir(root, func() error {
+		return createTaskFromArgsInDir(remaining)
+	})
+}
+
+func createTaskFromArgsInDir(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("missing title")
 	}

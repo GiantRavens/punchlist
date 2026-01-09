@@ -33,6 +33,9 @@ func newDeleteCmd() *cobra.Command {
 func deleteTasks(ids []int) {
 	for _, id := range ids {
 		if err := deleteTaskSingle(id); err != nil {
+			if printNotPunchlistError(err) {
+				return
+			}
 			fmt.Printf("Error deleting task %d: %v\n", id, err)
 		}
 	}

@@ -30,11 +30,30 @@ func newLsCmd() *cobra.Command {
 			lsOrder, _ := cmd.Flags().GetString("order")
 			lsReverse, _ := cmd.Flags().GetBool("reverse")
 
+			targetPath, remainingArgs := extractTargetPath(args)
+
 			// scan tasks directory
-			tasksPath, err := tasksDir()
-			if err != nil {
-				fmt.Printf("Error locating tasks: %v\n", err)
-				return
+			var tasksPath string
+			var err error
+			if targetPath != "" {
+				root, err := punchlistRootFromPath(targetPath)
+				if err != nil {
+					if printNotPunchlistError(err) {
+						return
+					}
+					fmt.Printf("Error locating tasks: %v\n", err)
+					return
+				}
+				tasksPath = filepath.Join(root, "tasks")
+			} else {
+				tasksPath, err = tasksDir()
+				if err != nil {
+					if printNotPunchlistError(err) {
+						return
+					}
+					fmt.Printf("Error locating tasks: %v\n", err)
+					return
+				}
 			}
 			if _, err := os.Stat(tasksPath); os.IsNotExist(err) {
 				fmt.Println("No tasks found.")
@@ -43,11 +62,11 @@ func newLsCmd() *cobra.Command {
 
 			// parse optional state filter
 			var filterState task.State
-			if len(args) > 0 {
-				if parsed, ok := task.ParseState(args[0]); ok {
+			if len(remainingArgs) > 0 {
+				if parsed, ok := task.ParseState(remainingArgs[0]); ok {
 					filterState = parsed
 				} else {
-					filterState = task.State(args[0])
+					filterState = task.State(remainingArgs[0])
 				}
 			}
 

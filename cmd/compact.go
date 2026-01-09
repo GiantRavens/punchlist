@@ -29,6 +29,9 @@ func newCompactCmd() *cobra.Command {
 		Short: "Compact task IDs into a contiguous sequence",
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := compactTasks(); err != nil {
+				if printNotPunchlistError(err) {
+					return
+				}
 				fmt.Printf("Error compacting tasks: %v\n", err)
 			}
 		},

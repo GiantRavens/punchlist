@@ -29,12 +29,14 @@ Examples of creating tasks:
 
 ```bash
 pin todo "write release plan" pri:1 by:2026-01-09 tags:{launch,pr}
+pin todo ../homeprojects "draft release email"
 ```
 
 Listing and inspecting tasks:
 
 ```bash
 pin ls
+pin ls ../homeprojects
 pin ls todo
 pin ls done
 pin ls todo --tag launch
