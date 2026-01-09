@@ -28,21 +28,17 @@ func DefaultLsStateOrder() []string {
 	return []string{"BEGUN", "BLOCK", "TODO", "CONFIRM", "DONE", "NOTDO"}
 }
 
-// find the nearest punchlist directory by walking parents
+// find the punchlist directory in the current working directory
 func findPunchlistDir(startDir string) (string, error) {
-	currentDir := startDir
-	for {
-		punchlistPath := filepath.Join(currentDir, PunchlistDir)
-		info, err := os.Stat(punchlistPath)
-		if err == nil && info.IsDir() {
-			return punchlistPath, nil
-		}
-		parent := filepath.Dir(currentDir)
-		if parent == currentDir {
-			return "", fmt.Errorf("could not find a %s directory in the current directory or any of its parents. please run 'pin init'", PunchlistDir)
-		}
-		currentDir = parent
+	punchlistPath := filepath.Join(startDir, PunchlistDir)
+	info, err := os.Stat(punchlistPath)
+	if err == nil && info.IsDir() {
+		return punchlistPath, nil
 	}
+	if err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("could not access %s directory: %w", PunchlistDir, err)
+	}
+	return "", fmt.Errorf("could not find a %s directory in the current directory. please run 'pin init'", PunchlistDir)
 }
 
 func FindPunchlistRoot() (string, error) {

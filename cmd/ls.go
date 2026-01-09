@@ -14,6 +14,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const stateSeparatorLine = "----------------------------------------"
+
 // create the ls command
 func newLsCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -107,7 +109,15 @@ func newLsCmd() *cobra.Command {
 			if configWidth > idWidth {
 				idWidth = configWidth
 			}
+			shouldGroupByState := filterState == "" &&
+				lsPriority == 0 &&
+				len(lsTags) == 0 &&
+				strings.ToLower(strings.TrimSpace(lsOrder)) != "id"
+			var lastState task.State
 			for _, t := range tasks {
+				if shouldGroupByState && lastState != "" && t.State != lastState {
+					fmt.Println(stateSeparatorLine)
+				}
 				tagSuffix := ""
 				if len(t.Tags) > 0 {
 					tagSuffix = fmt.Sprintf(" {%s}", strings.Join(t.Tags, ","))
@@ -121,6 +131,7 @@ func newLsCmd() *cobra.Command {
 					formatDueDate(t.Due),
 					tagSuffix,
 				)
+				lastState = t.State
 			}
 		},
 	}

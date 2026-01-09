@@ -28,6 +28,8 @@ pin "default todo task"
 pin ls [state] [flags]
 ```
 
+state can be any task state (TODO, BEGUN, BLOCK, CONFIRM, DONE, NOTDO).
+
 flags:
 - `--pri <int>`
 - `--tag <tag>` (repeatable)

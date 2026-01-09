@@ -35,6 +35,22 @@ func newInitCmd() *cobra.Command {
 				return
 			}
 
+			// ensure tasks directory exists without clobbering
+			tasksPath := filepath.Join(cwd, "tasks")
+			if info, err := os.Stat(tasksPath); err == nil {
+				if !info.IsDir() {
+					fmt.Println("Error: tasks exists and is not a directory.")
+					return
+				}
+				fmt.Println("Warning: tasks directory already exists; leaving it untouched.")
+			} else if !os.IsNotExist(err) {
+				fmt.Printf("Error checking tasks directory: %v\n", err)
+				return
+			} else if err := os.MkdirAll(tasksPath, 0755); err != nil {
+				fmt.Printf("Error creating tasks directory: %v\n", err)
+				return
+			}
+
 			// write a default config
 			defaultConfig := &config.Config{
 				NextID:       1,

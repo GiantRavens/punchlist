@@ -35,6 +35,8 @@ Listing and inspecting tasks:
 
 ```bash
 pin ls
+pin ls todo
+pin ls done
 pin ls todo --tag launch
 pin show 12
 ```

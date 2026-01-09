@@ -88,6 +88,11 @@ func TestInitCmd(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(config.PunchlistDir, "config.yaml")); os.IsNotExist(err) {
 		t.Errorf(".punchlist/config.yaml was not created")
 	}
+
+	// check that tasks directory was created
+	if info, err := os.Stat("tasks"); os.IsNotExist(err) || (err == nil && !info.IsDir()) {
+		t.Errorf("tasks directory was not created")
+	}
 }
 
 // test task creation via implicit pin
@@ -199,6 +204,20 @@ func TestStateAndLsCmds(t *testing.T) {
 		t.Fatalf("ls command failed: %v", err)
 	}
 	t.Logf("ls output:\n%s", output)
+	if strings.Count(output, stateSeparatorLine) != 2 {
+		t.Errorf("ls output should include 2 state separators, got %d", strings.Count(output, stateSeparatorLine))
+	}
+
+	output, err = executeCommand("ls", "todo")
+	if err != nil {
+		t.Fatalf("ls todo command failed: %v", err)
+	}
+	if !strings.Contains(output, "Task 1") || !strings.Contains(output, "Task 3") {
+		t.Errorf("ls todo should include Task 1 and Task 3. Got: %s", output)
+	}
+	if strings.Contains(output, "Task 2") || strings.Contains(output, "Task 4") {
+		t.Errorf("ls todo should not include Task 2 or Task 4. Got: %s", output)
+	}
 
 	// test ls with priority filter
 	output, err = executeCommand("ls", "--pri", "1")
