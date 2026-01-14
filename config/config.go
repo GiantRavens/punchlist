@@ -17,9 +17,12 @@ var ErrPunchlistNotFound = errors.New("punchlist directory not found")
 
 // config holds persisted settings for a punchlist scope
 type Config struct {
-	NextID       int      `yaml:"next_id"`
-	IDWidth      int      `yaml:"id_width,omitempty"`
-	LsStateOrder []string `yaml:"ls_state_order,omitempty"`
+	NextID          int      `yaml:"next_id"`
+	IDWidth         int      `yaml:"id_width,omitempty"`
+	LsStateOrder    []string `yaml:"ls_state_order,omitempty"`
+	EditStartInsert *bool    `yaml:"edit_start_insert,omitempty"`
+	TitleMaxLen     int      `yaml:"title_max_len,omitempty"`
+	LsTitleMaxLen   int      `yaml:"ls_title_max_len,omitempty"`
 }
 
 // default id width for filename padding
@@ -30,6 +33,21 @@ func DefaultIDWidth() int {
 // default state order for ls
 func DefaultLsStateOrder() []string {
 	return []string{"BEGUN", "BLOCK", "TODO", "CONFIRM", "DONE", "NOTDO"}
+}
+
+// default editor insert-mode behavior for vim-style editors
+func DefaultEditStartInsert() bool {
+	return true
+}
+
+// default max length for stored task titles (also influences filename slug)
+func DefaultTitleMaxLen() int {
+	return 80
+}
+
+// default max length for titles shown in pin ls
+func DefaultLsTitleMaxLen() int {
+	return 80
 }
 
 // find the punchlist directory in the current working directory

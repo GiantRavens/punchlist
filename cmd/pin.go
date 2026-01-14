@@ -73,6 +73,9 @@ func createTaskFromArgsInDir(args []string) error {
 		return fmt.Errorf("error loading config: %w", err)
 	}
 
+	fullTitle := title
+	title = truncateWithEllipsis(fullTitle, titleMaxLenFromConfig(cfg))
+
 	id := cfg.NextID
 	// build file path
 	slug := slugify(title)
@@ -100,7 +103,7 @@ func createTaskFromArgsInDir(args []string) error {
 		Due:       opts.due,
 	}
 	// use a default h1 body
-	newTask.Body = fmt.Sprintf("# %s\n", title)
+	newTask.Body = fmt.Sprintf("# %s\n", fullTitle)
 
 	if err := newTask.Write(filePath); err != nil {
 		return fmt.Errorf("error writing task file: %w", err)

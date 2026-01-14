@@ -128,6 +128,7 @@ func newLsCmd() *cobra.Command {
 			if configWidth > idWidth {
 				idWidth = configWidth
 			}
+			titleMaxLen := loadLsTitleMaxLen()
 			shouldGroupByState := filterState == "" &&
 				lsPriority == 0 &&
 				len(lsTags) == 0 &&
@@ -137,19 +138,22 @@ func newLsCmd() *cobra.Command {
 				if shouldGroupByState && lastState != "" && t.State != lastState {
 					fmt.Println(stateSeparatorLine)
 				}
-				tagSuffix := ""
-				if len(t.Tags) > 0 {
-					tagSuffix = fmt.Sprintf(" {%s}", strings.Join(t.Tags, ","))
+				displayTitle := truncateWithEllipsis(t.Title, titleMaxLen)
+				lineParts := []string{
+					fmt.Sprintf("%*d", idWidth, t.ID),
+					string(t.State),
+					displayTitle,
 				}
-				fmt.Printf("%*d %s %s pri:%d due:%s%s\n",
-					idWidth,
-					t.ID,
-					t.State,
-					t.Title,
-					t.Priority,
-					formatDueDate(t.Due),
-					tagSuffix,
-				)
+				if t.Priority > 0 {
+					lineParts = append(lineParts, fmt.Sprintf("pri:%d", t.Priority))
+				}
+				if t.Due != nil {
+					lineParts = append(lineParts, fmt.Sprintf("due:%s", formatDueDate(t.Due)))
+				}
+				if len(t.Tags) > 0 {
+					lineParts = append(lineParts, fmt.Sprintf("{%s}", strings.Join(t.Tags, ",")))
+				}
+				fmt.Printf("%s\n", strings.Join(lineParts, " "))
 				lastState = t.State
 			}
 		},

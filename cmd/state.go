@@ -55,6 +55,12 @@ func newStartCmd() *cobra.Command {
 			// parse one or many ids
 			ids, err := parseTaskIDs(args)
 			if err != nil {
+				if shouldCreateStateFromArgs(args) {
+					if err := createTaskFromArgs(append([]string{string(task.StateBegun)}, args...)); err != nil {
+						fmt.Printf("Failed to create begun task: %v\n", err)
+					}
+					return
+				}
 				fmt.Printf("Invalid task IDs: %v\n", err)
 				return
 			}
@@ -74,12 +80,92 @@ func newDoneCmd() *cobra.Command {
 			// parse one or many ids
 			ids, err := parseTaskIDs(args)
 			if err != nil {
+				if shouldCreateStateFromArgs(args) {
+					if err := createTaskFromArgs(append([]string{string(task.StateDone)}, args...)); err != nil {
+						fmt.Printf("Failed to create done task: %v\n", err)
+					}
+					return
+				}
 				fmt.Printf("Invalid task IDs: %v\n", err)
 				return
 			}
 			updateTaskState(ids, task.StateDone)
 		},
 	}
+}
+
+func shouldCreateStateFromArgs(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+
+	first := strings.TrimSpace(args[0])
+	if strings.HasPrefix(first, "[") {
+		return false
+	}
+
+	hasValidID := false
+	hasNonID := false
+	for _, arg := range args {
+		token := strings.TrimSpace(arg)
+		if token == "" {
+			continue
+		}
+		if isValidIDToken(token) {
+			hasValidID = true
+			continue
+		}
+		if isPotentialIDToken(token) {
+			return false
+		}
+		hasNonID = true
+	}
+
+	return hasNonID && !hasValidID
+}
+
+func isValidIDToken(token string) bool {
+	if token == "" {
+		return false
+	}
+	if strings.Count(token, "-") == 1 {
+		parts := strings.SplitN(token, "-", 2)
+		if parts[0] == "" || parts[1] == "" {
+			return false
+		}
+		return isAllDigits(parts[0]) && isAllDigits(parts[1])
+	}
+	if strings.Contains(token, "-") {
+		return false
+	}
+	return isAllDigits(token)
+}
+
+func isPotentialIDToken(token string) bool {
+	if token == "" {
+		return false
+	}
+	for _, r := range token {
+		if r == '-' {
+			continue
+		}
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func isAllDigits(token string) bool {
+	if token == "" {
+		return false
+	}
+	for _, r := range token {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // create the notdo/defer command
@@ -93,6 +179,12 @@ func newDeferCmd() *cobra.Command {
 			// parse one or many ids
 			ids, err := parseTaskIDs(args)
 			if err != nil {
+				if shouldCreateStateFromArgs(args) {
+					if err := createTaskFromArgs(append([]string{string(task.StateNotDo)}, args...)); err != nil {
+						fmt.Printf("Failed to create notdo task: %v\n", err)
+					}
+					return
+				}
 				fmt.Printf("Invalid task IDs: %v\n", err)
 				return
 			}
@@ -112,6 +204,12 @@ func newBlockCmd() *cobra.Command {
 			// parse one or many ids
 			ids, err := parseTaskIDs(args)
 			if err != nil {
+				if shouldCreateStateFromArgs(args) {
+					if err := createTaskFromArgs(append([]string{string(task.StateBlock)}, args...)); err != nil {
+						fmt.Printf("Failed to create block task: %v\n", err)
+					}
+					return
+				}
 				fmt.Printf("Invalid task IDs: %v\n", err)
 				return
 			}
@@ -131,6 +229,12 @@ func newConfirmCmd() *cobra.Command {
 			// parse one or many ids
 			ids, err := parseTaskIDs(args)
 			if err != nil {
+				if shouldCreateStateFromArgs(args) {
+					if err := createTaskFromArgs(append([]string{string(task.StateConfirm)}, args...)); err != nil {
+						fmt.Printf("Failed to create confirm task: %v\n", err)
+					}
+					return
+				}
 				fmt.Printf("Invalid task IDs: %v\n", err)
 				return
 			}

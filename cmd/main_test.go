@@ -7,18 +7,27 @@ import (
 	"path/filepath"
 	"punchlist/config"
 	"punchlist/task"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func sandboxRoot(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatalf("Failed to determine test file path")
+	}
+	packageDir := filepath.Dir(file)
+	projectRoot := filepath.Dir(packageDir)
+	return filepath.Join(projectRoot, "sandbox")
+}
 
 // setupTest creates a temporary directory for a test, changes into it, and returns a teardown function.
 func setupTest(t *testing.T) func() {
 	t.Helper()
 	// correctly refer to the sandbox dir in the project root
-	sandboxDir, err := filepath.Abs("../sandbox")
-	if err != nil {
-		t.Fatalf("Failed to get absolute path for sandbox: %v", err)
-	}
+	sandboxDir := sandboxRoot(t)
 	if err := os.MkdirAll(sandboxDir, 0755); err != nil {
 		t.Fatalf("Failed to create root sandbox dir: %v", err)
 	}
@@ -173,11 +182,65 @@ func TestPinCmd(t *testing.T) {
 		}
 	})
 
-	t.Run("creates a task in another directory by path", func(t *testing.T) {
-		sandboxDir, err := filepath.Abs("../sandbox")
+	t.Run("creates a DONE task via done subcommand", func(t *testing.T) {
+		output, err := executeCommand("done", "Quick done task")
 		if err != nil {
-			t.Fatalf("Failed to get sandbox dir: %v", err)
+			t.Fatalf("done command failed: %v", err)
 		}
+		if !strings.Contains(output, "Created task 3:") {
+			t.Errorf("Expected success message for task 3, but got: %s", output)
+		}
+
+		taskFile := filepath.Join(tasksPath, "003-quick-done-task.md")
+		content, err := os.ReadFile(taskFile)
+		if err != nil {
+			t.Fatalf("Failed to read task file: %v", err)
+		}
+		if !strings.Contains(string(content), "state: DONE") {
+			t.Errorf("done state was not set correctly in the task file")
+		}
+	})
+
+	t.Run("creates a BEGUN task via begun subcommand", func(t *testing.T) {
+		output, err := executeCommand("begun", "Quick begun task")
+		if err != nil {
+			t.Fatalf("begun command failed: %v", err)
+		}
+		if !strings.Contains(output, "Created task 4:") {
+			t.Errorf("Expected success message for task 4, but got: %s", output)
+		}
+
+		taskFile := filepath.Join(tasksPath, "004-quick-begun-task.md")
+		content, err := os.ReadFile(taskFile)
+		if err != nil {
+			t.Fatalf("Failed to read task file: %v", err)
+		}
+		if !strings.Contains(string(content), "state: BEGUN") {
+			t.Errorf("begun state was not set correctly in the task file")
+		}
+	})
+
+	t.Run("creates a BLOCK task via block subcommand", func(t *testing.T) {
+		output, err := executeCommand("block", "Quick block task")
+		if err != nil {
+			t.Fatalf("block command failed: %v", err)
+		}
+		if !strings.Contains(output, "Created task 5:") {
+			t.Errorf("Expected success message for task 5, but got: %s", output)
+		}
+
+		taskFile := filepath.Join(tasksPath, "005-quick-block-task.md")
+		content, err := os.ReadFile(taskFile)
+		if err != nil {
+			t.Fatalf("Failed to read task file: %v", err)
+		}
+		if !strings.Contains(string(content), "state: BLOCK") {
+			t.Errorf("block state was not set correctly in the task file")
+		}
+	})
+
+	t.Run("creates a task in another directory by path", func(t *testing.T) {
+		sandboxDir := sandboxRoot(t)
 		otherDir, err := os.MkdirTemp(sandboxDir, "other-*")
 		if err != nil {
 			t.Fatalf("Failed to create other dir: %v", err)
@@ -336,6 +399,39 @@ func TestLogCmd(t *testing.T) {
 	}
 }
 
+func TestTagCmd(t *testing.T) {
+	teardown := setupTest(t)
+	defer teardown()
+
+	executeCommand("init")
+	executeCommand("todo", "Task 1", "tags:{alpha}")
+	executeCommand("todo", "Task 2")
+
+	output, err := executeCommand("tag", "1", "2", "today, urgent")
+	if err != nil {
+		t.Fatalf("tag command failed: %v", err)
+	}
+	if !strings.Contains(output, "Updated tags for task 1") || !strings.Contains(output, "Updated tags for task 2") {
+		t.Errorf("Expected success messages, got: %s", output)
+	}
+
+	task1, err := task.Parse("tasks/001-task-1.md")
+	if err != nil {
+		t.Fatalf("Failed to parse task 1: %v", err)
+	}
+	task2, err := task.Parse("tasks/002-task-2.md")
+	if err != nil {
+		t.Fatalf("Failed to parse task 2: %v", err)
+	}
+
+	if !hasTag(task1.Tags, "alpha") || !hasTag(task1.Tags, "today") || !hasTag(task1.Tags, "urgent") {
+		t.Errorf("Task 1 tags not updated as expected: %v", task1.Tags)
+	}
+	if !hasTag(task2.Tags, "today") || !hasTag(task2.Tags, "urgent") {
+		t.Errorf("Task 2 tags not updated as expected: %v", task2.Tags)
+	}
+}
+
 // test delete command behavior
 func TestDeleteCmd(t *testing.T) {
 	teardown := setupTest(t)
@@ -373,10 +469,7 @@ func TestLsPathTarget(t *testing.T) {
 	teardown := setupTest(t)
 	defer teardown()
 
-	sandboxDir, err := filepath.Abs("../sandbox")
-	if err != nil {
-		t.Fatalf("Failed to get sandbox dir: %v", err)
-	}
+	sandboxDir := sandboxRoot(t)
 	otherDir, err := os.MkdirTemp(sandboxDir, "other-*")
 	if err != nil {
 		t.Fatalf("Failed to create other dir: %v", err)
@@ -401,4 +494,13 @@ func TestLsPathTarget(t *testing.T) {
 	if !strings.Contains(output, "Other task") {
 		t.Errorf("ls with path should include task from target dir. Got: %s", output)
 	}
+}
+
+func hasTag(tags []string, tag string) bool {
+	for _, t := range tags {
+		if t == tag {
+			return true
+		}
+	}
+	return false
 }

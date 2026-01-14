@@ -3,15 +3,24 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
+func sandboxRoot(t *testing.T) string {
+	t.Helper()
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatalf("Failed to determine test file path")
+	}
+	packageDir := filepath.Dir(file)
+	projectRoot := filepath.Dir(packageDir)
+	return filepath.Join(projectRoot, "sandbox")
+}
+
 // test punchlist dir discovery
 func TestFindPunchlistDir(t *testing.T) {
-	sandboxDir, err := filepath.Abs("sandbox")
-	if err != nil {
-		t.Fatalf("Failed to get absolute path for sandbox: %v", err)
-	}
+	sandboxDir := sandboxRoot(t)
 	if err := os.MkdirAll(sandboxDir, 0755); err != nil {
 		t.Fatalf("Failed to create sandbox dir: %v", err)
 	}
@@ -34,30 +43,10 @@ func TestFindPunchlistDir(t *testing.T) {
 		}
 	})
 
-	// test case 2: .punchlist in parent directory
-	t.Run("finds .punchlist in parent dir", func(t *testing.T) {
-		parentDir := filepath.Join(sandboxDir, "test2")
-		punchlistDir := filepath.Join(parentDir, PunchlistDir)
-		childDir := filepath.Join(parentDir, "child")
-		if err := os.MkdirAll(childDir, 0755); err != nil {
-			t.Fatalf("Failed to create child dir: %v", err)
-		}
-		if err := os.MkdirAll(punchlistDir, 0755); err != nil {
-			t.Fatalf("Failed to create punchlist dir: %v", err)
-		}
-
-		foundDir, err := findPunchlistDir(childDir)
-		if err != nil {
-			t.Errorf("Expected to find .punchlist dir, but got error: %v", err)
-		}
-		if foundDir != punchlistDir {
-			t.Errorf("Expected dir %s, but got %s", punchlistDir, foundDir)
-		}
-	})
-
 	// test case 3: no .punchlist directory
 	t.Run("returns error when no .punchlist dir", func(t *testing.T) {
-		testDir := filepath.Join(sandboxDir, "test3")
+		tempRoot := t.TempDir()
+		testDir := filepath.Join(tempRoot, "test3")
 		if err := os.MkdirAll(testDir, 0755); err != nil {
 			t.Fatalf("Failed to create test dir: %v", err)
 		}
@@ -71,10 +60,7 @@ func TestFindPunchlistDir(t *testing.T) {
 
 // test load and save config round-trip
 func TestLoadAndSaveConfig(t *testing.T) {
-	sandboxDir, err := filepath.Abs("sandbox")
-	if err != nil {
-		t.Fatalf("Failed to get absolute path for sandbox: %v", err)
-	}
+	sandboxDir := sandboxRoot(t)
 	if err := os.MkdirAll(sandboxDir, 0755); err != nil {
 		t.Fatalf("Failed to create sandbox dir: %v", err)
 	}

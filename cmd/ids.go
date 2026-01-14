@@ -67,6 +67,33 @@ func extractBracketSelector(args []string) (string, bool, error) {
 	return builder.String(), true, nil
 }
 
+// extract a bracket selector from the start of args, returning its end index
+func extractBracketSelectorPrefix(args []string) (string, int, bool, error) {
+	first := strings.TrimSpace(args[0])
+	if !strings.HasPrefix(first, "[") {
+		return "", -1, false, nil
+	}
+
+	var builder strings.Builder
+	endIndex := -1
+	for i, arg := range args {
+		if i > 0 {
+			builder.WriteString(" ")
+		}
+		builder.WriteString(arg)
+		if strings.Contains(arg, "]") {
+			endIndex = i
+			break
+		}
+	}
+
+	if endIndex == -1 {
+		return "", -1, false, fmt.Errorf("unterminated bracket selector")
+	}
+
+	return builder.String(), endIndex, true, nil
+}
+
 // parse a single bracket selector string
 func parseBracketSelector(selector string) ([]int, error) {
 	trimmed := strings.TrimSpace(selector)

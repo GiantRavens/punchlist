@@ -30,6 +30,7 @@ Examples of creating tasks:
 ```bash
 pin todo "write release plan" pri:1 by:2026-01-09 tags:{launch,pr}
 pin todo ../homeprojects "draft release email"
+pin done "shipped quick fix for onboarding typo"
 ```
 
 Listing and inspecting tasks:
@@ -51,6 +52,8 @@ pin done 12
 pin block 12
 pin confirm 12
 pin notdo 12
+pin begun "triage the backlog"
+pin block "waiting on vendor response"
 ```
 
 Add notes and log entries to existing tasks:
@@ -58,6 +61,18 @@ Add notes and log entries to existing tasks:
 ```bash
 pin note 12 "call vendor and confirm timeline"
 pin log 12 "reviewed draft and sent feedback"
+```
+
+Tag existing tasks:
+
+```bash
+pin tag 12 15 "today, blocked"
+```
+
+Open a task in your editor:
+
+```bash
+pin edit 12
 ```
 
 Add a due date:

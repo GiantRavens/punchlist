@@ -52,10 +52,14 @@ func newInitCmd() *cobra.Command {
 			}
 
 			// write a default config
+			defaultStartInsert := config.DefaultEditStartInsert()
 			defaultConfig := &config.Config{
-				NextID:       1,
-				IDWidth:      config.DefaultIDWidth(),
-				LsStateOrder: config.DefaultLsStateOrder(),
+				NextID:          1,
+				IDWidth:         config.DefaultIDWidth(),
+				LsStateOrder:    config.DefaultLsStateOrder(),
+				EditStartInsert: &defaultStartInsert,
+				TitleMaxLen:     config.DefaultTitleMaxLen(),
+				LsTitleMaxLen:   config.DefaultLsTitleMaxLen(),
 			}
 			if err := config.SaveConfig(defaultConfig); err != nil {
 				fmt.Printf("Error creating default config: %v\n", err)

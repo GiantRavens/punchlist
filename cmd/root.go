@@ -25,10 +25,13 @@ Priority and dates are always optional.
 Examples:
   pin "write outline"
   pin todo "draft messaging brief" pri:1
+  pin done "shipped quick fix for onboarding typo"
   pin todo "send pr draft" by:2026-01-15
   pin todo "ship notes" by:tomorrow
   pin todo "review plan" by:friday
   pin todo ../work "queue follow-up"
+  pin begun "triage the backlog"
+  pin block "waiting on vendor response"
 
 List and modify tasks:
   pin ls
@@ -37,6 +40,8 @@ List and modify tasks:
   pin due 12 "next tuesday"
   pin log 12 "sent draft to team"
   pin note 12 "ask for feedback from legal"
+  pin tag 12 15 "today, blocked"
+  pin edit 12
   pin del 12
   pin compact
 
@@ -57,10 +62,10 @@ Zsh cwd hook snippet (optional, for prompt or env):
   _pin_set_root`
 
 	cmd := &cobra.Command{
-		Use:     "pin",
-		Aliases: []string{"punchlist"},
-		Short:   "A text-native, AI-friendly task and ticket system.",
-		Long:    longDesc,
+		Use:               "pin",
+		Aliases:           []string{"punchlist"},
+		Short:             "A text-native, AI-friendly task and ticket system.",
+		Long:              longDesc,
 		ValidArgsFunction: rootArgCompletion,
 	}
 
@@ -76,7 +81,9 @@ Zsh cwd hook snippet (optional, for prompt or env):
 	cmd.AddCommand(newLogCmd())
 	cmd.AddCommand(newDueCmd())
 	cmd.AddCommand(newNoteCmd())
+	cmd.AddCommand(newTagCmd())
 	cmd.AddCommand(newShowCmd())
+	cmd.AddCommand(newEditCmd())
 	cmd.AddCommand(newConfigCmd())
 
 	// keep completion available but hidden from help
