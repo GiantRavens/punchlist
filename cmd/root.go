@@ -45,6 +45,9 @@ List and modify tasks:
   pin del 12
   pin compact
 
+State aliases: confirm = review/followup, block = waiting. Uppercase forms are accepted.
+Config highlights: edit_goyo enables +Goyo for vim/nvim; browse_margin widens browse gutters.
+
 Zsh cwd hook snippet (optional, for prompt or env):
   autoload -U add-zsh-hook
   _pin_set_root() {
@@ -69,22 +72,24 @@ Zsh cwd hook snippet (optional, for prompt or env):
 		ValidArgsFunction: rootArgCompletion,
 	}
 
-	cmd.AddCommand(newInitCmd())
-	cmd.AddCommand(newLsCmd())
-	cmd.AddCommand(newStartCmd())
-	cmd.AddCommand(newDoneCmd())
-	cmd.AddCommand(newDeferCmd())
 	cmd.AddCommand(newBlockCmd())
-	cmd.AddCommand(newConfirmCmd())
-	cmd.AddCommand(newDeleteCmd())
+	cmd.AddCommand(newBrowseCmd())
 	cmd.AddCommand(newCompactCmd())
-	cmd.AddCommand(newLogCmd())
-	cmd.AddCommand(newDueCmd())
-	cmd.AddCommand(newNoteCmd())
-	cmd.AddCommand(newTagCmd())
-	cmd.AddCommand(newShowCmd())
-	cmd.AddCommand(newEditCmd())
+	cmd.AddCommand(newConfirmCmd())
 	cmd.AddCommand(newConfigCmd())
+	cmd.AddCommand(newDeleteCmd())
+	cmd.AddCommand(newDeferCmd())
+	cmd.AddCommand(newDoneCmd())
+	cmd.AddCommand(newDueCmd())
+	cmd.AddCommand(newEditCmd())
+	cmd.AddCommand(newInitCmd())
+	cmd.AddCommand(newLogCmd())
+	cmd.AddCommand(newLsCmd())
+	cmd.AddCommand(newNoteCmd())
+	cmd.AddCommand(newShowCmd())
+	cmd.AddCommand(newStartCmd())
+	cmd.AddCommand(newTodoCmd())
+	cmd.AddCommand(newTagCmd())
 
 	// keep completion available but hidden from help
 	cmd.CompletionOptions.HiddenDefaultCmd = true

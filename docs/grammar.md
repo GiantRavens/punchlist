@@ -49,9 +49,11 @@ pin show <id>
 
 ```
 pin start <ids>
+pin todo <ids>
 pin done <ids>
 pin block <ids>
 pin confirm <ids>
+pin followup <ids>
 pin notdo <ids>
 ```
 
@@ -67,6 +69,8 @@ If you pass non-id text instead, a task is created in that state:
 pin begun "triage the backlog"
 pin block "waiting on vendor response"
 ```
+
+State commands accept uppercase aliases and a few synonyms (for example: `pin TODO 1,2,3`, `pin DONE 1,2,3`, `pin REVIEW 12`, `pin WAITING 12`, `pin FOLLOWUP 12`).
 
 ## Edit a Task
 
@@ -114,5 +118,7 @@ each changed task gets a log entry noting the old and new id.
 - `id_width`: zero padding width for filenames (default 3)
 - `ls_state_order`: custom state ordering for `pin ls`
 - `edit_start_insert`: when true, add `+startinsert` for vim/nvim (default true)
+- `edit_goyo`: when true, add `+Goyo` for vim/nvim (default false)
+- `browse_margin`: columns of left/right margin in `pin browse` (default 12)
 - `title_max_len`: max stored title length before truncation (default 80)
 - `ls_title_max_len`: max title length shown in `pin ls` (default 80)

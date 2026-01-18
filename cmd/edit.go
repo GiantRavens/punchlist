@@ -38,6 +38,9 @@ func newEditCmd() *cobra.Command {
 			if shouldStartInsert(editorCommand) {
 				editorArgs = append(editorArgs, "+startinsert")
 			}
+			if shouldStartGoyo(editorCommand) {
+				editorArgs = append(editorArgs, "+Goyo")
+			}
 			editorArgs = append(editorArgs, taskPath)
 
 			cmdExec := exec.Command(editorCommand, editorArgs...)
@@ -74,6 +77,19 @@ func shouldStartInsert(editorCommand string) bool {
 		startInsert = *cfg.EditStartInsert
 	}
 	if !startInsert {
+		return false
+	}
+	editorName := strings.ToLower(filepath.Base(editorCommand))
+	return editorName == "nvim" || editorName == "vim"
+}
+
+func shouldStartGoyo(editorCommand string) bool {
+	cfg, err := config.LoadConfig()
+	startGoyo := config.DefaultEditGoyo()
+	if err == nil && cfg.EditGoyo != nil {
+		startGoyo = *cfg.EditGoyo
+	}
+	if !startGoyo {
 		return false
 	}
 	editorName := strings.ToLower(filepath.Base(editorCommand))

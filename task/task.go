@@ -38,6 +38,10 @@ func ParseState(input string) (State, bool) {
 		return StateBlock, true
 	case string(StateConfirm):
 		return StateConfirm, true
+	case "FOLLOWUP", "FOLLOW-UP", "REVIEW":
+		return StateConfirm, true
+	case "WAITING":
+		return StateBlock, true
 	default:
 		return "", false
 	}
@@ -56,6 +60,7 @@ type Task struct {
 	StartedAt    *time.Time `yaml:"started_at,omitempty"`
 	CompletedAt  *time.Time `yaml:"completed_at,omitempty"`
 	ExternalRefs []string   `yaml:"external_refs,omitempty"`
+	Path         string     `yaml:"-"`
 	Body         string     `yaml:"-"`
 }
 
@@ -107,6 +112,7 @@ func Parse(filePath string) (*Task, error) {
 		return nil, fmt.Errorf("failed to unmarshal frontmatter: %w", err)
 	}
 
+	task.Path = filePath
 	task.Body = strings.TrimSpace(bodyContent.String())
 
 	return &task, nil

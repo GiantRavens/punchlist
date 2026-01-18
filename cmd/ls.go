@@ -278,10 +278,14 @@ func normalizeOrderLabel(label string) (string, bool) {
 		return stateOrderKey(task.StateBlock), true
 	case "CONFIRM", "FOLLOWUP", "FOLLOW-UP", "CHASE":
 		return stateOrderKey(task.StateConfirm), true
+	case "REVIEW":
+		return stateOrderKey(task.StateConfirm), true
 	case "DONE":
 		return stateOrderKey(task.StateDone), true
 	case "NOTDO", "DEFER", "DEFERRED":
 		return stateOrderKey(task.StateNotDo), true
+	case "WAITING":
+		return stateOrderKey(task.StateBlock), true
 	default:
 		return "", false
 	}

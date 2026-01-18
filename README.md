@@ -48,13 +48,17 @@ Updating task 'states':
 
 ```bash
 pin start 12
+pin todo 12
 pin done 12
 pin block 12
 pin confirm 12
+pin followup 12
 pin notdo 12
 pin begun "triage the backlog"
 pin block "waiting on vendor response"
 ```
+
+State commands accept uppercase aliases and a few synonyms (for example: `pin TODO 12`, `pin DONE 12`, `pin REVIEW 12`, `pin WAITING 12`, `pin FOLLOWUP 12`).
 
 Add notes and log entries to existing tasks:
 
@@ -164,6 +168,19 @@ _punchlist_maybe_notice() {
 - config lives in `.punchlist/config.yaml`.
 - deleted tasks move to `.trash/`.
 - compacted tasks have their filenames renumbered, but a log entry is added noting the original and new id's
+
+## Config
+
+`.punchlist/config.yaml` supports:
+
+- `next_id`: next task id
+- `id_width`: zero padding width for filenames (default 3)
+- `ls_state_order`: custom state ordering for `pin ls`
+- `edit_start_insert`: when true, add `+startinsert` for vim/nvim (default true)
+- `edit_goyo`: when true, add `+Goyo` for vim/nvim (default false)
+- `browse_margin`: columns of left/right margin in `pin browse` (default 12)
+- `title_max_len`: max stored title length before truncation (default 80)
+- `ls_title_max_len`: max title length shown in `pin ls` (default 80)
 
 ## Development
 

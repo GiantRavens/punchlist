@@ -21,6 +21,8 @@ type Config struct {
 	IDWidth         int      `yaml:"id_width,omitempty"`
 	LsStateOrder    []string `yaml:"ls_state_order,omitempty"`
 	EditStartInsert *bool    `yaml:"edit_start_insert,omitempty"`
+	EditGoyo        *bool    `yaml:"edit_goyo,omitempty"`
+	BrowseMargin    int      `yaml:"browse_margin,omitempty"`
 	TitleMaxLen     int      `yaml:"title_max_len,omitempty"`
 	LsTitleMaxLen   int      `yaml:"ls_title_max_len,omitempty"`
 }
@@ -38,6 +40,16 @@ func DefaultLsStateOrder() []string {
 // default editor insert-mode behavior for vim-style editors
 func DefaultEditStartInsert() bool {
 	return true
+}
+
+// default goyo invocation for vim/nvim
+func DefaultEditGoyo() bool {
+	return false
+}
+
+// default browse margin (columns per side)
+func DefaultBrowseMargin() int {
+	return 12
 }
 
 // default max length for stored task titles (also influences filename slug)

@@ -44,6 +44,30 @@ func findTaskFile(id int) (string, error) {
 	return "", fmt.Errorf("task with ID %d not found", id)
 }
 
+// create the todo command
+func newTodoCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "todo [id]",
+		Aliases: []string{"TODO"},
+		Short:   "Move a task back to TODO",
+		Args:    cobra.MinimumNArgs(1),
+		Run: func(cmd *cobra.Command, args []string) {
+			ids, err := parseTaskIDs(args)
+			if err != nil {
+				if shouldCreateStateFromArgs(args) {
+					if err := createTaskFromArgs(append([]string{string(task.StateTodo)}, args...)); err != nil {
+						fmt.Printf("Failed to create todo task: %v\n", err)
+					}
+					return
+				}
+				fmt.Printf("Invalid task IDs: %v\n", err)
+				return
+			}
+			updateTaskState(ids, task.StateTodo)
+		},
+	}
+}
+
 // create the start command
 func newStartCmd() *cobra.Command {
 	return &cobra.Command{
@@ -172,7 +196,7 @@ func isAllDigits(token string) bool {
 func newDeferCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "notdo [id]",
-		Aliases: []string{"defer", "NOTDO"},
+		Aliases: []string{"defer", "DEFER", "NOTDO"},
 		Short:   "Mark a task as not to do",
 		Args:    cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -197,7 +221,7 @@ func newDeferCmd() *cobra.Command {
 func newBlockCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "block [id]",
-		Aliases: []string{"BLOCK"},
+		Aliases: []string{"BLOCK", "waiting", "WAITING"},
 		Short:   "Change a task's status to BLOCKED",
 		Args:    cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -222,7 +246,7 @@ func newBlockCmd() *cobra.Command {
 func newConfirmCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "confirm [id]",
-		Aliases: []string{"CONFIRM"},
+		Aliases: []string{"CONFIRM", "followup", "FOLLOWUP", "review", "REVIEW"},
 		Short:   "Mark a task as needing confirmation",
 		Args:    cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
