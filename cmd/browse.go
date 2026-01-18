@@ -260,28 +260,27 @@ func (m model) View() string {
 	// 1. Filename (base name)
 	content.WriteString(filepath.Base(currentTask.Path) + "\n")
 
-	// 2. Tags
+	// 2. Blank line
+	content.WriteString("\n")
+
+	// 3. # short title (currentTask.Title), prefixed with ticket ID
+	content.WriteString(titleStyle.Render(fmt.Sprintf("%d %s", currentTask.ID, currentTask.Title)) + "\n")
+
+	// 4. Blank line
+	content.WriteString("\n")
+
+	// 5. STATUS (currentTask.State) with tags on same line
+	statusLine := stateStyle.Render(string(currentTask.State))
 	if len(currentTask.Tags) > 0 {
 		formattedTags := make([]string, len(currentTask.Tags))
 		for i, tag := range currentTask.Tags {
 			formattedTags[i] = "#" + tag
 		}
-		content.WriteString(tagStyle.Render(strings.Join(formattedTags, ", ")) + "\n")
+		statusLine += " " + tagStyle.Render(strings.Join(formattedTags, " "))
 	}
+	content.WriteString(statusLine + "\n")
 
-	// 3. Blank line
-	content.WriteString("\n")
-
-	// 4. # short title (currentTask.Title)
-	content.WriteString(titleStyle.Render(currentTask.Title) + "\n")
-
-	// 5. Blank line
-	content.WriteString("\n")
-
-	// 6. STATUS (currentTask.State)
-	content.WriteString(stateStyle.Render(string(currentTask.State)) + "\n")
-
-	// 7. Blank line (between status and content)
+	// 6. Blank line (between status and content)
 	content.WriteString("\n")
 
 	// Body rendering with sections
