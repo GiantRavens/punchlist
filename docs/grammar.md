@@ -16,36 +16,93 @@ modifiers:
 - `by:<date>` or `due:<date>`
 - `tags:{a,b,c}`
 
-examples:
+examples of the kinds of actions you can take as quick one liners from the command line:
 
-```
-pin todo "draft qbr outline" pri:1 by:2026-01-15 tags:{qbr,launch}
-pin "default todo task"
-pin done "quick win you want to record"
-```
+Fire off a complete TODO with priority, due date, and helpful tags:
+
+`pin todo "draft qbr outline" pri:1 by:2026-01-15 tags:{qbr,launch}`
+
+Add a quick todo that you'll fill in later - note that its status as a 'todo' is implied:
+
+`pin "build quick outline for fidgetspinner launch"`
+
+And maybe you just want to record a quick action of something completed - this might be helpful to include in a weekly or monthly rollup of accomplishments for example:
+
+`pin done "quick win you want to record and refer to later"
 
 ## Listing Tasks
+
+You can list/dump all tasks with a simple:
+
+`pin ls`
+
+and you'll see every task by state order.
+
+If you just want to see open todos filter with:
+
+`pin ls --status TODO`
+
+and you'll just see all open TODO tickets.
 
 ```
 pin ls [path] [state] [flags]
 ```
 
-state can be any task state (TODO, BEGUN, BLOCK, CONFIRM, DONE, NOTDO).
+Not that --status and --state are aliases, and you can list any task state (TODO, BEGUN, BLOCK, CONFIRM, DONE, NOTDO).
+
 path is optional and must start with `.` or `/`.
 
 flags:
 - `--pri <int>`
 - `--tag <tag>` (repeatable)
+- `--state <state>`
+- `--status <state>` (alias)
+- `--order state|id`
+- `--reverse`
+
+## Search Tasks
+
+You can also quickly search for a key word across all tasks like:
+
+`pin search "widget"`
+
+```
+pin search [path] <query> [flags]
+```
+
+Search is case-insensitive across frontmatter, title, and body/notes (logs excluded).
+
+flags:
+- `--pri <int>`
+- `--tag <tag>` (repeatable)
+- `--state <state>`
+- `--status <state>` (alias)
 - `--order state|id`
 - `--reverse`
 
 ## Show All Tasks
 
+Sometimes you just want to drill down into a single task like:
+
+`pin show 23`
+
 ```
 pin show <id>
 ```
 
+## Browsing all Tasks, TUI style
+
+And sometimes you want to page through all tasks and get hotkey actions to edit, mark tasks etc. 
+
+To do that issue:
+
+`pin browse`
+
+You'll be taken to a TUI style interface where you can e:edit, left/right arrow browse, n:note s:state your tasks one at a time.
+
 ## Modify Task 'State'
+
+You can quickly mark the 'state' of a task like take it from todo to begun, begun to done, etc.
 
 ```
 pin start <ids>
@@ -63,7 +120,7 @@ pin notdo <ids>
 - `12-15`
 - `"[12, 13, 15-20]"`
 
-If you pass non-id text instead, a task is created in that state:
+If you pass non-id text instead, a new task is created in that state:
 
 ```
 pin begun "triage the backlog"
@@ -74,15 +131,18 @@ State commands accept uppercase aliases and a few synonyms (for example: `pin TO
 
 ## Edit a Task
 
+Editing a task to add more detailed notes, etc. fires up your default editor.
+
 ```
 pin edit <id>
 ```
 
-## Add Infomraiton to a Task (notes, log, duedate)
+## Add Informaton to a Task (notes, duedate)
+
+You can also quickly fire off one-liners to augment a task like add a note, change the duedate, etc.
 
 ```
 pin note <id> <message>
-pin log <id> <message>
 pin due <id> <date>
 pin tag <ids> <tags>
 ```

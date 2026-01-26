@@ -5,24 +5,18 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"punchlist/config"
 	"punchlist/task"
-	"sort"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 )
 
-const stateSeparatorLine = "----------------------------------------"
-
-// create the ls command
-func newLsCmd() *cobra.Command {
+// create the search command
+func newSearchCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "ls [state]",
-		Short:             "List tasks",
-		Long:              `List tasks, optionally filtering by state, priority, and tags.`,
-		ValidArgsFunction: stateArgCompletion,
+		Use:   "search [path] <query>",
+		Short: "Search tasks by text",
+		Long:  "Search tasks by text across frontmatter, title, and body/notes (excluding logs).",
 		Run: func(cmd *cobra.Command, args []string) {
 			// read filter and sort flags
 			lsPriority, _ := cmd.Flags().GetInt("pri")
@@ -33,6 +27,17 @@ func newLsCmd() *cobra.Command {
 			lsStatus, _ := cmd.Flags().GetString("status")
 
 			targetPath, remainingArgs := extractTargetPath(args)
+			if len(remainingArgs) == 0 {
+				fmt.Println("Error: search query required")
+				return
+			}
+			query := strings.Join(remainingArgs, " ")
+			query = strings.TrimSpace(query)
+			if query == "" {
+				fmt.Println("Error: search query required")
+				return
+			}
+			queryLower := strings.ToLower(query)
 
 			// scan tasks directory
 			var tasksPath string
@@ -62,7 +67,7 @@ func newLsCmd() *cobra.Command {
 				return
 			}
 
-			// parse optional state filter
+			// parse optional state filter (flag only for search)
 			var filterState task.State
 			stateToken := lsState
 			if stateToken == "" {
@@ -70,15 +75,6 @@ func newLsCmd() *cobra.Command {
 			} else if lsStatus != "" && !strings.EqualFold(lsState, lsStatus) {
 				fmt.Println("Error: state provided twice (use either --state or --status)")
 				return
-			}
-			if stateToken != "" && len(remainingArgs) > 0 {
-				if !strings.EqualFold(stateToken, remainingArgs[0]) {
-					fmt.Println("Error: state provided twice (use either --state or positional state)")
-					return
-				}
-			}
-			if stateToken == "" && len(remainingArgs) > 0 {
-				stateToken = remainingArgs[0]
 			}
 			if stateToken != "" {
 				if parsed, ok := task.ParseState(stateToken); ok {
@@ -127,13 +123,31 @@ func newLsCmd() *cobra.Command {
 						}
 					}
 
+					content, err := os.ReadFile(path)
+					if err != nil {
+						fmt.Printf("Error reading task file %s: %v\n", path, err)
+						return nil
+					}
+					frontmatter, body := splitFrontmatterAndBody(string(content))
+					body = removeLogSection(body)
+					searchable := strings.Join([]string{frontmatter, t.Title, body}, "\n")
+
+					if !strings.Contains(strings.ToLower(searchable), queryLower) {
+						return nil
+					}
+
 					tasks = append(tasks, t)
 				}
 				return nil
 			})
 
 			if err != nil {
-				fmt.Printf("Error listing tasks: %v\n", err)
+				fmt.Printf("Error searching tasks: %v\n", err)
+				return
+			}
+
+			if len(tasks) == 0 {
+				fmt.Println("No matches found.")
 				return
 			}
 
@@ -148,8 +162,6 @@ func newLsCmd() *cobra.Command {
 			}
 			titleMaxLen := loadLsTitleMaxLen()
 			shouldGroupByState := filterState == "" &&
-				lsPriority == 0 &&
-				len(lsTags) == 0 &&
 				strings.ToLower(strings.TrimSpace(lsOrder)) != "id"
 			var lastState task.State
 			for _, t := range tasks {
@@ -187,126 +199,30 @@ func newLsCmd() *cobra.Command {
 	return cmd
 }
 
-// render due dates consistently
-func formatDueDate(t *time.Time) string {
-	if t == nil {
-		return "n/a"
-	}
-	return t.Format("2006-01-02")
-}
+const searchFrontmatterSeparator = "---"
 
-// sort tasks by the requested ordering
-func sortTasks(tasks []*task.Task, order string, reverse bool) {
-	order = strings.ToLower(strings.TrimSpace(order))
-	switch order {
-	case "id":
-		sort.Slice(tasks, func(i, j int) bool {
-			if reverse {
-				return tasks[i].ID > tasks[j].ID
-			}
-			return tasks[i].ID < tasks[j].ID
-		})
-	default:
-		stateOrder := loadStateOrder()
-		orderIndex := buildStateOrderIndex(stateOrder)
-		sort.Slice(tasks, func(i, j int) bool {
-			ai := orderIndex[stateOrderKey(tasks[i].State)]
-			aj := orderIndex[stateOrderKey(tasks[j].State)]
-			if ai == aj {
-				if reverse {
-					return tasks[i].ID > tasks[j].ID
-				}
-				return tasks[i].ID < tasks[j].ID
-			}
-			if reverse {
-				return ai > aj
-			}
-			return ai < aj
-		})
+func splitFrontmatterAndBody(content string) (string, string) {
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 {
+		return "", ""
 	}
-}
-
-// read state ordering from config
-func loadStateOrder() []string {
-	cfg, err := config.LoadConfig()
-	if err != nil || len(cfg.LsStateOrder) == 0 {
-		return config.DefaultLsStateOrder()
+	if strings.TrimSpace(lines[0]) != searchFrontmatterSeparator {
+		return "", content
 	}
-	return cfg.LsStateOrder
-}
-
-// read id width from config
-func loadIDWidth() int {
-	cfg, err := config.LoadConfig()
-	if err != nil || cfg.IDWidth <= 0 {
-		return config.DefaultIDWidth()
-	}
-	return cfg.IDWidth
-}
-
-// build a lookup index from a state order list
-func buildStateOrderIndex(order []string) map[string]int {
-	index := make(map[string]int, len(order))
-	for i, label := range order {
-		if state, ok := normalizeOrderLabel(label); ok {
-			index[state] = i
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == searchFrontmatterSeparator {
+			frontmatter := strings.Join(lines[1:i], "\n")
+			body := strings.Join(lines[i+1:], "\n")
+			return frontmatter, body
 		}
 	}
-	defaultIndex := len(order)
-	for _, state := range []task.State{
-		task.StateBegun,
-		task.StateBlock,
-		task.StateTodo,
-		task.StateConfirm,
-		task.StateDone,
-		task.StateNotDo,
-	} {
-		key := stateOrderKey(state)
-		if _, ok := index[key]; !ok {
-			index[key] = defaultIndex
-			defaultIndex++
-		}
-	}
-	return index
+	return "", content
 }
 
-// calculate width for right-aligned id output
-func maxIDWidth(tasks []*task.Task) int {
-	width := 1
-	for _, t := range tasks {
-		digits := len(fmt.Sprintf("%d", t.ID))
-		if digits > width {
-			width = digits
-		}
+func removeLogSection(body string) string {
+	before, _, after, found := splitSection(body, "## Log")
+	if !found {
+		return body
 	}
-	return width
-}
-
-// normalize for state ordering map keys
-func stateOrderKey(state task.State) string {
-	return strings.ToUpper(string(state))
-}
-
-// normalize state labels from config for ordering
-func normalizeOrderLabel(label string) (string, bool) {
-	switch strings.ToUpper(strings.TrimSpace(label)) {
-	case "TODO":
-		return stateOrderKey(task.StateTodo), true
-	case "BEGUN", "DOING", "INPROGRESS", "IN-PROGRESS":
-		return stateOrderKey(task.StateBegun), true
-	case "BLOCK", "BLOCKED":
-		return stateOrderKey(task.StateBlock), true
-	case "CONFIRM", "FOLLOWUP", "FOLLOW-UP", "CHASE":
-		return stateOrderKey(task.StateConfirm), true
-	case "REVIEW":
-		return stateOrderKey(task.StateConfirm), true
-	case "DONE":
-		return stateOrderKey(task.StateDone), true
-	case "NOTDO", "DEFER", "DEFERRED":
-		return stateOrderKey(task.StateNotDo), true
-	case "WAITING":
-		return stateOrderKey(task.StateBlock), true
-	default:
-		return "", false
-	}
+	return joinBlocks(before, after)
 }

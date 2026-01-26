@@ -37,6 +37,7 @@ List and modify tasks:
   pin ls
   pin ls ../work
   pin ls todo --tag launch
+  pin search exagrid
   pin due 12 "next tuesday"
   pin log 12 "sent draft to team"
   pin note 12 "ask for feedback from legal"
@@ -86,6 +87,7 @@ Zsh cwd hook snippet (optional, for prompt or env):
 	cmd.AddCommand(newLogCmd())
 	cmd.AddCommand(newLsCmd())
 	cmd.AddCommand(newNoteCmd())
+	cmd.AddCommand(newSearchCmd())
 	cmd.AddCommand(newShowCmd())
 	cmd.AddCommand(newStartCmd())
 	cmd.AddCommand(newTodoCmd())

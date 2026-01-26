@@ -314,6 +314,28 @@ func TestStateAndLsCmds(t *testing.T) {
 		t.Errorf("ls todo should not include Task 2 or Task 4. Got: %s", output)
 	}
 
+	output, err = executeCommand("ls", "--state", "todo")
+	if err != nil {
+		t.Fatalf("ls --state todo command failed: %v", err)
+	}
+	if !strings.Contains(output, "Task 1") || !strings.Contains(output, "Task 3") {
+		t.Errorf("ls --state todo should include Task 1 and Task 3. Got: %s", output)
+	}
+	if strings.Contains(output, "Task 2") || strings.Contains(output, "Task 4") {
+		t.Errorf("ls --state todo should not include Task 2 or Task 4. Got: %s", output)
+	}
+
+	output, err = executeCommand("ls", "--status", "todo")
+	if err != nil {
+		t.Fatalf("ls --status todo command failed: %v", err)
+	}
+	if !strings.Contains(output, "Task 1") || !strings.Contains(output, "Task 3") {
+		t.Errorf("ls --status todo should include Task 1 and Task 3. Got: %s", output)
+	}
+	if strings.Contains(output, "Task 2") || strings.Contains(output, "Task 4") {
+		t.Errorf("ls --status todo should not include Task 2 or Task 4. Got: %s", output)
+	}
+
 	// test ls with priority filter
 	output, err = executeCommand("ls", "--pri", "1")
 	if err != nil {
@@ -342,7 +364,7 @@ func TestStateAndLsCmds(t *testing.T) {
 	}
 
 	// test ls with multiple filters
-	output, err = executeCommand("ls", "todo", "--pri", "1", "--tag", "urgent")
+	output, err = executeCommand("ls", "--state", "todo", "--pri", "1", "--tag", "urgent")
 	if err != nil {
 		t.Fatalf("ls with multiple filters failed: %v", err)
 	}
@@ -363,6 +385,69 @@ func TestStateAndLsCmds(t *testing.T) {
 	}
 	if !strings.Contains(output, "Task 4") {
 		t.Errorf("ls block should contain Task 4. Got: %s", output)
+	}
+}
+
+func TestSearchCmd(t *testing.T) {
+	teardown := setupTest(t)
+	defer teardown()
+
+	executeCommand("init")
+	tasksPath, err := tasksDir()
+	if err != nil {
+		t.Fatalf("Failed to resolve tasks dir: %v", err)
+	}
+	os.MkdirAll(tasksPath, 0755)
+
+	task1 := &task.Task{
+		ID:    1,
+		Title: "ExaGrid setup",
+		State: task.StateTodo,
+		Body:  "## Notes\n\n- called ExaGrid support\n\n## Log\n\n- 2026-01-01: moved to TODO\n",
+	}
+	task1.Write(filepath.Join(tasksPath, "001-exagrid-setup.md"))
+
+	task2 := &task.Task{
+		ID:    2,
+		Title: "Follow-up",
+		State: task.StateDone,
+		Body:  "Investigate exagrid appliance options.\n",
+	}
+	task2.Write(filepath.Join(tasksPath, "002-follow-up.md"))
+
+	task3 := &task.Task{
+		ID:    3,
+		Title: "Log only",
+		State: task.StateTodo,
+		Body:  "## Log\n\n- mention exagrid in log only\n",
+	}
+	task3.Write(filepath.Join(tasksPath, "003-log-only.md"))
+
+	output, err := executeCommand("search", "exagrid")
+	if err != nil {
+		t.Fatalf("search command failed: %v", err)
+	}
+	if !strings.Contains(output, "ExaGrid setup") || !strings.Contains(output, "Follow-up") {
+		t.Errorf("search should include Task 1 and Task 2. Got: %s", output)
+	}
+	if strings.Contains(output, "Log only") {
+		t.Errorf("search should not include Task 3 (log-only). Got: %s", output)
+	}
+
+	output, err = executeCommand("search", "--state", "done", "exagrid")
+	if err != nil {
+		t.Fatalf("search --state done command failed: %v", err)
+	}
+	if !strings.Contains(output, "Follow-up") || strings.Contains(output, "ExaGrid setup") {
+		t.Errorf("search --state done should include only Task 2. Got: %s", output)
+	}
+
+	output, err = executeCommand("search", "--status", "done", "exagrid")
+	if err != nil {
+		t.Fatalf("search --status done command failed: %v", err)
+	}
+	if !strings.Contains(output, "Follow-up") || strings.Contains(output, "ExaGrid setup") {
+		t.Errorf("search --status done should include only Task 2. Got: %s", output)
 	}
 }
 

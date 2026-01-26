@@ -41,8 +41,21 @@ pin ls ../homeprojects
 pin ls todo
 pin ls done
 pin ls todo --tag launch
+pin ls --state todo
+pin ls --status todo
+pin search exagrid
 pin show 12
 ```
+
+Browse tasks interactively:
+
+```bash
+pin browse
+pin browse todo
+```
+
+`pin browse` opens a keyboard-driven viewer with the current task, plus quick actions for adding notes
+and updating state.
 
 Updating task 'states':
 
