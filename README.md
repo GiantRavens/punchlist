@@ -47,6 +47,8 @@ pin search exagrid
 pin show 12
 ```
 
+Search scans frontmatter, title, and body/notes (logs excluded) with case-insensitive matching.
+
 Browse tasks interactively:
 
 ```bash

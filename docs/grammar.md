@@ -28,7 +28,7 @@ Add a quick todo that you'll fill in later - note that its status as a 'todo' is
 
 And maybe you just want to record a quick action of something completed - this might be helpful to include in a weekly or monthly rollup of accomplishments for example:
 
-`pin done "quick win you want to record and refer to later"
+`pin done "quick win you want to record and refer to later"`
 
 ## Listing Tasks
 
@@ -48,7 +48,7 @@ and you'll just see all open TODO tickets.
 pin ls [path] [state] [flags]
 ```
 
-Not that --status and --state are aliases, and you can list any task state (TODO, BEGUN, BLOCK, CONFIRM, DONE, NOTDO).
+Note that --status and --state are aliases, and you can list any task state (TODO, BEGUN, BLOCK, CONFIRM, DONE, NOTDO).
 
 path is optional and must start with `.` or `/`.
 
