@@ -7,35 +7,14 @@ import (
 	"path/filepath"
 	"punchlist/config"
 	"punchlist/task"
-	"runtime"
 	"strings"
 	"testing"
 )
 
-func sandboxRoot(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatalf("Failed to determine test file path")
-	}
-	packageDir := filepath.Dir(file)
-	projectRoot := filepath.Dir(packageDir)
-	return filepath.Join(projectRoot, "sandbox")
-}
-
 // setupTest creates a temporary directory for a test, changes into it, and returns a teardown function.
 func setupTest(t *testing.T) func() {
 	t.Helper()
-	// correctly refer to the sandbox dir in the project root
-	sandboxDir := sandboxRoot(t)
-	if err := os.MkdirAll(sandboxDir, 0755); err != nil {
-		t.Fatalf("Failed to create root sandbox dir: %v", err)
-	}
-
-	testDir, err := os.MkdirTemp(sandboxDir, "test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir in sandbox: %v", err)
-	}
+	testDir := t.TempDir()
 
 	originalWd, err := os.Getwd()
 	if err != nil {
@@ -48,7 +27,6 @@ func setupTest(t *testing.T) func() {
 	// teardown function
 	return func() {
 		os.Chdir(originalWd)
-		os.RemoveAll(testDir)
 	}
 }
 
@@ -240,12 +218,7 @@ func TestPinCmd(t *testing.T) {
 	})
 
 	t.Run("creates a task in another directory by path", func(t *testing.T) {
-		sandboxDir := sandboxRoot(t)
-		otherDir, err := os.MkdirTemp(sandboxDir, "other-*")
-		if err != nil {
-			t.Fatalf("Failed to create other dir: %v", err)
-		}
-		t.Cleanup(func() { os.RemoveAll(otherDir) })
+		otherDir := t.TempDir()
 
 		if err := withWorkingDir(otherDir, func() error {
 			_, err := executeCommand("init")
@@ -554,12 +527,7 @@ func TestLsPathTarget(t *testing.T) {
 	teardown := setupTest(t)
 	defer teardown()
 
-	sandboxDir := sandboxRoot(t)
-	otherDir, err := os.MkdirTemp(sandboxDir, "other-*")
-	if err != nil {
-		t.Fatalf("Failed to create other dir: %v", err)
-	}
-	t.Cleanup(func() { os.RemoveAll(otherDir) })
+	otherDir := t.TempDir()
 
 	if err := withWorkingDir(otherDir, func() error {
 		_, err := executeCommand("init")

@@ -3,32 +3,14 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 )
 
-func sandboxRoot(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatalf("Failed to determine test file path")
-	}
-	packageDir := filepath.Dir(file)
-	projectRoot := filepath.Dir(packageDir)
-	return filepath.Join(projectRoot, "sandbox")
-}
-
 // test punchlist dir discovery
 func TestFindPunchlistDir(t *testing.T) {
-	sandboxDir := sandboxRoot(t)
-	if err := os.MkdirAll(sandboxDir, 0755); err != nil {
-		t.Fatalf("Failed to create sandbox dir: %v", err)
-	}
-	defer os.RemoveAll(sandboxDir)
-
 	// test case 1: .punchlist in current directory
 	t.Run("finds .punchlist in current dir", func(t *testing.T) {
-		testDir := filepath.Join(sandboxDir, "test1")
+		testDir := t.TempDir()
 		punchlistDir := filepath.Join(testDir, PunchlistDir)
 		if err := os.MkdirAll(punchlistDir, 0755); err != nil {
 			t.Fatalf("Failed to create test dir: %v", err)
@@ -60,13 +42,7 @@ func TestFindPunchlistDir(t *testing.T) {
 
 // test load and save config round-trip
 func TestLoadAndSaveConfig(t *testing.T) {
-	sandboxDir := sandboxRoot(t)
-	if err := os.MkdirAll(sandboxDir, 0755); err != nil {
-		t.Fatalf("Failed to create sandbox dir: %v", err)
-	}
-	defer os.RemoveAll(sandboxDir)
-
-	testDir := filepath.Join(sandboxDir, "test_load_save")
+	testDir := t.TempDir()
 	punchlistDir := filepath.Join(testDir, PunchlistDir)
 	if err := os.MkdirAll(punchlistDir, 0755); err != nil {
 		t.Fatalf("Failed to create test dir: %v", err)
