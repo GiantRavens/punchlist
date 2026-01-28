@@ -9,7 +9,7 @@
 
 # punchlist
 
-Punchlist is an open, transparent, markdown-native task ticket system. Every TODO/task is a markdown file, easily parsed and edited with tools like nvim or Obsidian.
+Punchlist is an open, transparent, markdown-native, AI-friendly task ticket system. Every TODO/task is a markdown file, easily parsed and edited with tools like nvim or Obsidian, or wired into your coding assistant workflow.
 
 ## Make any folder a scoped task system
 
@@ -196,6 +196,52 @@ _punchlist_maybe_notice() {
 - `browse_margin`: columns of left/right margin in `pin browse` (default 12)
 - `title_max_len`: max stored title length before truncation (default 80)
 - `ls_title_max_len`: max title length shown in `pin ls` (default 80)
+
+## Using punchlist with AI coding assistants
+
+Punchlist works best with assistants when tasks are small, explicit, and easy to verify. Use tickets as the source of truth, and have the assistant update task state as work progresses.
+
+If you use agent instruction files, see `AGENTS.md` at the repo root for machine-facing guidance on how assistants should operate in this codebase.
+
+Suggested ticket template (markdown file content):
+
+```markdown
+---
+state: todo
+pri: 2
+by: 2026-02-01
+tags: [ai, assistant]
+---
+
+# <short, testable outcome>
+
+## Goal
+<one sentence>
+
+## Acceptance
+- [ ] <verifiable result>
+- [ ] <test or command to run, if any>
+
+## Context
+- Files: <paths>
+- Links: <issues/docs>
+
+## Notes for assistant
+- Constraints: <style/tech>
+- Assumptions: <if any>
+```
+
+Workflow tips:
+
+- Keep tasks tiny and specific; one outcome per ticket.
+- Include concrete acceptance checks (files changed, behavior, tests).
+- Add file paths and constraints so the assistant can act without guessing.
+- Track status with `pin start`, `pin block`, `pin done`, and add `pin log` notes as you go.
+
+## Docs
+
+- `docs/assistant-brief.md` for assistant workflows and best practices.
+- `docs/help-docs-build-generated.md` for offline `pin --help` output (auto-generated during build).
 
 ## Development
 
