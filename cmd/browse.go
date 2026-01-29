@@ -21,9 +21,6 @@ import (
 var (
 	browseMargin = config.DefaultBrowseMargin()
 	docStyle     = lipgloss.NewStyle().Margin(0, browseMargin)
-	titleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	stateStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
-	tagStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	helpStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
@@ -241,6 +238,57 @@ func formatDisplayTimestamp(ts string) string {
 	return t.Local().Format("2006-01-02-1504")
 }
 
+func browseSummaryLine(t *task.Task, idWidth, contentWidth, titleMaxLen int) string {
+	if contentWidth <= 0 {
+		contentWidth = 1
+	}
+	idStr := fmt.Sprintf("%*d", idWidth, t.ID)
+	stateStr := string(t.State)
+
+	suffixParts := []string{}
+	if t.Priority > 0 {
+		suffixParts = append(suffixParts, fmt.Sprintf("pri:%d", t.Priority))
+	}
+	if t.Due != nil {
+		suffixParts = append(suffixParts, fmt.Sprintf("due:%s", formatDueDate(t.Due)))
+	}
+	if len(t.Tags) > 0 {
+		suffixParts = append(suffixParts, fmt.Sprintf("{%s}", strings.Join(t.Tags, ",")))
+	}
+
+	base := strings.Join([]string{idStr, stateStr}, " ")
+	suffix := strings.Join(suffixParts, " ")
+
+	available := contentWidth - len(base)
+	if suffix != "" {
+		available -= 1 + len(suffix)
+	}
+	if available < 0 {
+		available = 0
+	}
+	if titleMaxLen > 0 && titleMaxLen < available {
+		available = titleMaxLen
+	}
+
+	title := ""
+	if available > 0 {
+		title = truncateWithEllipsis(t.Title, available)
+	}
+
+	parts := []string{base}
+	if title != "" {
+		parts = append(parts, title)
+	}
+	if suffix != "" {
+		parts = append(parts, suffix)
+	}
+	line := strings.Join(parts, " ")
+	if contentWidth > 0 && len(line) > contentWidth {
+		line = truncateWithEllipsis(line, contentWidth)
+	}
+	return line
+}
+
 func (m model) View() string {
 	if len(m.tasks) == 0 {
 		return docStyle.Render("No tasks to display.")
@@ -254,91 +302,9 @@ func (m model) View() string {
 
 	currentTask := m.tasks[m.cursor]
 	contentWidth := m.width - (browseMargin * 2) - 4
-	bodyStyle := lipgloss.NewStyle().Width(contentWidth)
-	var content strings.Builder
-
-	// 1. Filename (base name)
-	content.WriteString(filepath.Base(currentTask.Path) + "\n")
-
-	// 2. Blank line
-	content.WriteString("\n")
-
-	// 3. # short title (currentTask.Title), prefixed with ticket ID
-	content.WriteString(titleStyle.Render(fmt.Sprintf("%d %s", currentTask.ID, currentTask.Title)) + "\n")
-
-	// 4. Blank line
-	content.WriteString("\n")
-
-	// 5. STATUS (currentTask.State) with tags on same line
-	statusLine := stateStyle.Render(string(currentTask.State))
-	if len(currentTask.Tags) > 0 {
-		formattedTags := make([]string, len(currentTask.Tags))
-		for i, tag := range currentTask.Tags {
-			formattedTags[i] = "#" + tag
-		}
-		statusLine += " " + tagStyle.Render(strings.Join(formattedTags, " "))
-	}
-	content.WriteString(statusLine + "\n")
-
-	// 6. Blank line (between status and content)
-	content.WriteString("\n")
-
-	// Body rendering with sections
-	notesBody, logSection, _, logFound := splitSection(currentTask.Body, "## Log")
-	mainNotes, notesSection, _, notesFound := splitSection(notesBody, "## Notes")
-	mainNotes = strings.TrimSpace(mainNotes)
-
-	if mainNotes != "" {
-		content.WriteString(bodyStyle.Render(mainNotes))
-		content.WriteString("\n") // Ensure space after main notes if present
-	}
-	if notesFound {
-		var notesContent strings.Builder
-		notesContent.WriteString("\n## Notes\n") // Removed extra newline for better spacing
-		for _, line := range strings.Split(notesSection, "\n") {
-			if strings.HasPrefix(line, "- ") {
-				bullet := "- "
-				parts := strings.SplitN(line[len(bullet):], ": ", 2)
-				var renderedNote string
-				if len(parts) == 2 {
-					timestamp, message := parts[0], parts[1]
-					formattedTs := formatDisplayTimestamp(timestamp)
-					fullText := formattedTs + ": " + message
-					noteStyle := lipgloss.NewStyle().Width(contentWidth - len(bullet))
-					renderedNote = lipgloss.JoinHorizontal(lipgloss.Top, bullet, noteStyle.Render(fullText))
-				} else {
-					noteStyle := lipgloss.NewStyle().Width(contentWidth - len(bullet))
-					renderedNote = lipgloss.JoinHorizontal(lipgloss.Top, bullet, noteStyle.Render(line[len(bullet):]))
-				}
-				notesContent.WriteString(renderedNote + "\n")
-			}
-		}
-		content.WriteString(notesContent.String())
-	}
-	if logFound {
-		var logContent strings.Builder
-		logContent.WriteString("\n## Log\n") // Removed extra newline for better spacing
-		for _, line := range strings.Split(logSection, "\n") {
-			if strings.HasPrefix(line, "- ") {
-				bullet := "- "
-				parts := strings.SplitN(line[len(bullet):], ": ", 2)
-				var renderedLog string
-				if len(parts) == 2 {
-					timestamp, message := parts[0], parts[1]
-					formattedTs := formatDisplayTimestamp(timestamp)
-					fullText := formattedTs + ": " + message
-					logStyle := lipgloss.NewStyle().Width(contentWidth - len(bullet))
-					renderedLog = lipgloss.JoinHorizontal(lipgloss.Top, bullet, logStyle.Render(fullText))
-				} else {
-					logStyle := lipgloss.NewStyle().Width(contentWidth - len(bullet))
-					renderedLog = lipgloss.JoinHorizontal(lipgloss.Top, bullet, logStyle.Render(line[len(bullet):]))
-				}
-				logContent.WriteString(renderedLog + "\n")
-			}
-		}
-		content.WriteString(logContent.String())
-	}
-	mainContent = content.String()
+	idWidth := maxIDWidth(m.tasks)
+	titleMaxLen := loadLsTitleMaxLen()
+	mainContent = browseSummaryLine(currentTask, idWidth, contentWidth, titleMaxLen)
 
 	switch m.mode {
 	case modeNote:

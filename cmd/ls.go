@@ -136,6 +136,10 @@ func newLsCmd() *cobra.Command {
 				fmt.Printf("Error listing tasks: %v\n", err)
 				return
 			}
+			if len(tasks) == 0 {
+				fmt.Println("No matches found.")
+				return
+			}
 
 			// order results
 			sortTasks(tasks, lsOrder, lsReverse)
