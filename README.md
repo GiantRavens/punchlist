@@ -57,7 +57,7 @@ pin browse todo
 ```
 
 `pin browse` opens a keyboard-driven viewer with the current task, plus quick actions for adding notes
-and updating state.
+and updating state (d/b/t/c/x, n for notes, e to edit, q to quit, arrows/J/K to move).
 
 Updating task 'states':
 
@@ -75,11 +75,10 @@ pin block "waiting on vendor response"
 
 State commands accept uppercase aliases and a few synonyms (for example: `pin TODO 12`, `pin DONE 12`, `pin REVIEW 12`, `pin WAITING 12`, `pin FOLLOWUP 12`).
 
-Add notes and log entries to existing tasks:
+Add notes to existing tasks:
 
 ```bash
 pin note 12 "call vendor and confirm timeline"
-pin log 12 "reviewed draft and sent feedback"
 ```
 
 Tag existing tasks:
@@ -236,7 +235,7 @@ Workflow tips:
 - Keep tasks tiny and specific; one outcome per ticket.
 - Include concrete acceptance checks (files changed, behavior, tests).
 - Add file paths and constraints so the assistant can act without guessing.
-- Track status with `pin start`, `pin block`, `pin done`, and add `pin log` notes as you go.
+- Track status with `pin start`, `pin block`, `pin done`, and add `pin note` updates as you go.
 
 ## Docs
 

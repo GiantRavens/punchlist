@@ -104,6 +104,7 @@ func createTaskFromArgsInDir(args []string) error {
 	}
 	// use a default h1 body
 	newTask.Body = fmt.Sprintf("# %s\n", fullTitle)
+	addLog(newTask, "Created task")
 
 	if err := newTask.Write(filePath); err != nil {
 		return fmt.Errorf("error writing task file: %w", err)

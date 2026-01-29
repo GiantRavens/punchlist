@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -87,6 +88,41 @@ func TestParseAndWriteTask(t *testing.T) {
 		}
 		if parsedTask.Title != task.Title {
 			t.Errorf("Expected Title '%s', got '%s'", task.Title, parsedTask.Title)
+		}
+	})
+
+	t.Run("parses title with unescaped colon via lenient fallback", func(t *testing.T) {
+		frontmatter := strings.Join([]string{
+			"id: 7",
+			"title: Fix encapsulation breach: GameHUD directly accesses game_system.manifest",
+			"state: DONE",
+			"created_at: 2026-01-26T12:55:46.547687-06:00",
+			"updated_at: 2026-01-26T13:56:52.216953-06:00",
+		}, "\n")
+
+		payload := strings.Join([]string{
+			"---",
+			frontmatter,
+			"---",
+			"",
+			"Body line.",
+		}, "\n")
+
+		filePath := filepath.Join(sandboxDir, "colon_title_task.md")
+		if err := os.WriteFile(filePath, []byte(payload), 0644); err != nil {
+			t.Fatalf("Failed to write task file: %v", err)
+		}
+
+		parsedTask, err := Parse(filePath)
+		if err != nil {
+			t.Fatalf("Parse() failed: %v", err)
+		}
+
+		if parsedTask.Title != "Fix encapsulation breach: GameHUD directly accesses game_system.manifest" {
+			t.Errorf("Unexpected Title '%s'", parsedTask.Title)
+		}
+		if parsedTask.State != StateDone {
+			t.Errorf("Expected State '%s', got '%s'", StateDone, parsedTask.State)
 		}
 	})
 }

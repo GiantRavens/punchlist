@@ -19,7 +19,8 @@ Use punchlist as the source of truth for work. Tasks are markdown files in `task
 - Read the task and follow its acceptance checks.
 - Prefer small, testable changes.
 - Update state as you work: `pin start`, `pin block`, `pin done`.
-- Log decisions and commands with `pin log`.
+- Log decisions and commands with `pin note`.
+- Treat `## Log` as system-only history (state changes, compaction, etc.). Do not add entries manually.
 - If available, run `pin --help` to confirm command grammar.
 - If requirements are unclear, ask before proceeding.
 
@@ -30,6 +31,6 @@ pin ls
 pin ls todo
 pin show <id>
 pin start <id>
-pin log <id> "note"
+pin note <id> "note"
 pin done <id>
 ```

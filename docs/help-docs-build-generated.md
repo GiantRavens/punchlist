@@ -37,7 +37,6 @@ pin ls ../work
 pin ls todo --tag launch
 pin search exagrid
 pin due 12 "next tuesday"
-pin log 12 "sent draft to team"
 pin note 12 "ask for feedback from legal"
 pin tag 12 15 "today, blocked"
 pin edit 12
@@ -91,7 +90,6 @@ pin, punchlist
 | `edit` | Open a task in your editor |
 | `help` | Help about any command |
 | `init` | Initialize a new punchlist project |
-| `log` | Add a log entry to a task |
 | `ls` | List tasks |
 | `notdo` | Mark a task as not to do |
 | `note` | Add a note to a task |

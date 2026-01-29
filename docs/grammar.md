@@ -98,7 +98,18 @@ To do that issue:
 
 `pin browse`
 
-You'll be taken to a TUI style interface where you can e:edit, left/right arrow browse, n:note s:state your tasks one at a time.
+You'll be taken to a TUI style interface with these hotkeys:
+
+- left/K: previous ticket
+- right/J/space: next ticket
+- n: add a note
+- e: edit in your editor
+- d: mark done
+- b: mark begun
+- t: mark todo
+- c: mark confirm
+- x: mark notdo
+- q: quit
 
 ## Modify Task 'State'
 

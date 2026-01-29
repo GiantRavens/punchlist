@@ -12,7 +12,7 @@ Punchlist is a markdown-native ticket system. Each task is a markdown file with 
 2) List tasks: `pin ls` or `pin ls todo`.
 3) Pick a task, open it: `pin show <id>`.
 4) Start work: `pin start <id>`.
-5) Implement and add notes: `pin log <id> "did X and Y"`.
+5) Implement and add notes: `pin note <id> "did X and Y"`.
 6) Finish: `pin done <id>` or set another state like `pin block <id>`.
 
 ## Ticket anatomy
@@ -32,7 +32,7 @@ Use the title and "Acceptance" section as the source of truth.
 - Use tasks to drive work. Do not invent requirements that are not in the ticket.
 - Prefer small, testable edits over broad refactors.
 - Always update task state as work progresses.
-- Record key decisions and commands in `pin log`.
+- Record key decisions and commands in `pin note`.
 - If blocked, set `pin block` and explain why.
 
 ## Best practices for tickets
@@ -51,7 +51,7 @@ pin ls
 pin ls todo
 pin show 12
 pin start 12
-pin log 12 "ran tests: go test ./..."
+pin note 12 "ran tests: go test ./..."
 pin note 12 "need design input for UI copy"
 pin block 12
 pin done 12
@@ -65,7 +65,7 @@ pin ls todo
 pin show 12
 pin start 12
 ...edit code and run tests...
-pin log 12 "updated config parser, added tests"
+pin note 12 "updated config parser, added tests"
 pin done 12
 ```
 
@@ -73,4 +73,4 @@ pin done 12
 
 - Skipping the task acceptance checks.
 - Making wide, speculative changes not asked for.
-- Forgetting to update task state or log important work.
+- Forgetting to update task state or note important work.

@@ -20,8 +20,8 @@ import (
 
 var (
 	browseMargin = config.DefaultBrowseMargin()
-	docStyle     = lipgloss.NewStyle().Margin(0, browseMargin)
-	helpStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	helpStyle    = lipgloss.NewStyle().Faint(true)
+	contentStyle = lipgloss.NewStyle()
 )
 
 type viewMode int
@@ -41,6 +41,7 @@ type model struct {
 	cursor    int
 	width     int
 	height    int
+	margin    int
 	mode      viewMode
 	textinput textinput.Model
 	err       error
@@ -59,6 +60,7 @@ func initialModel(tasks []*task.Task) model {
 	return model{
 		tasks:     tasks,
 		cursor:    0,
+		margin:    browseMargin,
 		mode:      modeBrowse,
 		textinput: ti,
 		err:       nil,
@@ -76,7 +78,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.textinput.Width = msg.Width - (browseMargin * 2) - 4 // account for margin
+		m.margin = effectiveBrowseMargin(msg.Width)
+		m.textinput.Width = browseContentWidth(msg.Width, m.margin)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -85,19 +88,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "ctrl+c", "q":
 				return m, tea.Quit
-			case "left", "k":
+			case "left", "k", "K":
 				if m.cursor > 0 {
 					m.cursor--
 				}
-			case "right", "j", " ":
+			case "right", "j", "J", " ":
 				if m.cursor < len(m.tasks)-1 {
 					m.cursor++
 				}
+			case "t":
+				return applyStateChange(m, task.StateTodo)
+			case "b":
+				return applyStateChange(m, task.StateBegun)
+			case "d":
+				return applyStateChange(m, task.StateDone)
+			case "c":
+				return applyStateChange(m, task.StateConfirm)
 			case "n":
 				m.mode = modeNote
 				m.textinput.Focus()
 				m.textinput.SetValue("") // clear previous input
 				return m, textinput.Blink
+			case "x":
+				return applyStateChange(m, task.StateNotDo)
 			case "s":
 				m.mode = modeState
 				return m, nil
@@ -111,7 +124,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					editorArgs = append(editorArgs, "+startinsert")
 				}
 				if shouldStartGoyo(editorCommand) {
-					editorArgs = append(editorArgs, "+Goyo")
+					editorArgs = append(editorArgs, goyoArgs()...)
 				}
 				editorArgs = append(editorArgs, currentTask.Path)
 				cmdExec := exec.Command(editorCommand, editorArgs...)
@@ -143,11 +156,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "t":
 				newState = task.StateTodo
-			case "g":
+			case "b":
 				newState = task.StateBegun
 			case "d":
 				newState = task.StateDone
-			case "b":
+			case "k":
 				newState = task.StateBlock
 			case "c":
 				newState = task.StateConfirm
@@ -160,16 +173,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil // no state change
 			}
 
-			currentTask := m.tasks[m.cursor]
-			oldState := currentTask.State
-			if oldState != newState {
-				changeState(currentTask, newState)
-				logMsg := fmt.Sprintf("State changed from %s to %s", oldState, newState)
-				addLog(currentTask, logMsg)
-				if err := currentTask.Write(currentTask.Path); err != nil {
-					m.err = err
-				}
-			}
+			m, _ = applyStateChange(m, newState)
 			m.mode = modeBrowse
 			return m, nil
 		}
@@ -182,6 +186,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	m.textinput, cmd = m.textinput.Update(msg)
 	return m, cmd
+}
+
+func applyStateChange(m model, newState task.State) (model, tea.Cmd) {
+	if len(m.tasks) == 0 {
+		return m, nil
+	}
+	currentTask := m.tasks[m.cursor]
+	oldState := currentTask.State
+	if oldState != newState {
+		changeState(currentTask, newState)
+		logMsg := fmt.Sprintf("State changed from %s to %s", oldState, newState)
+		addLog(currentTask, logMsg)
+		if err := currentTask.Write(currentTask.Path); err != nil {
+			m.err = err
+		}
+	}
+	return m, nil
 }
 
 func addNote(t *task.Task, message string) {
@@ -243,6 +264,9 @@ func browseSummaryLine(t *task.Task, idWidth, contentWidth, titleMaxLen int) str
 		contentWidth = 1
 	}
 	idStr := fmt.Sprintf("%*d", idWidth, t.ID)
+	if contentWidth <= idWidth+1 {
+		idStr = fmt.Sprintf("%d", t.ID)
+	}
 	stateStr := string(t.State)
 
 	suffixParts := []string{}
@@ -286,12 +310,15 @@ func browseSummaryLine(t *task.Task, idWidth, contentWidth, titleMaxLen int) str
 	if contentWidth > 0 && len(line) > contentWidth {
 		line = truncateWithEllipsis(line, contentWidth)
 	}
+	if strings.TrimSpace(line) == "" {
+		line = fmt.Sprintf("%d", t.ID)
+	}
 	return line
 }
 
 func (m model) View() string {
 	if len(m.tasks) == 0 {
-		return docStyle.Render("No tasks to display.")
+		return applyLeftMargin("No tasks to display.", m.margin)
 	}
 	if m.width == 0 {
 		return "..."
@@ -301,33 +328,54 @@ func (m model) View() string {
 	var help string
 
 	currentTask := m.tasks[m.cursor]
-	contentWidth := m.width - (browseMargin * 2) - 4
-	idWidth := maxIDWidth(m.tasks)
-	titleMaxLen := loadLsTitleMaxLen()
-	mainContent = browseSummaryLine(currentTask, idWidth, contentWidth, titleMaxLen)
+	contentWidth := browseContentWidth(m.width, m.margin)
+	mainContent = renderBrowseContent(currentTask, contentWidth)
+	debugEnabled := browseDebugEnabled()
 
 	switch m.mode {
 	case modeNote:
 		help = "enter: save note  esc: cancel\n" + m.textinput.View()
 	case modeState:
-		help = "t: todo  g: begun  d: done  b: block  c: confirm  n: notdo  esc: cancel"
+		help = "t: todo  b: begun  d: done  k: block  c: confirm  n: notdo  esc: cancel"
 	default: // modeBrowse
-		help = "←/k: prev  →/j/space: next  n: new note  s: set state  e: edit  q: quit"
+		help = "←/K: prev  →/J/space: next\n" +
+			"d:done  b:begun  t:todo  c:confirm  x:notdo  n:note  e:edit  q:quit"
+	}
+	if debugEnabled {
+		titleLen := len([]rune(currentTask.Title))
+		help = fmt.Sprintf(
+			"%s\ndebug w=%d h=%d m=%d c=%d title=%d main=%q",
+			help,
+			m.width,
+			m.height,
+			m.margin,
+			contentWidth,
+			titleLen,
+			mainContent,
+		)
 	}
 
 	contentHeight := lipgloss.Height(mainContent)
 	helpHeight := lipgloss.Height(help)
-	spacerHeight := m.height - contentHeight - helpHeight - 0
+	topPad := browseTopPadding(m.height, contentHeight, helpHeight)
+	spacerHeight := m.height - topPad - contentHeight - helpHeight
 	if spacerHeight < 0 {
 		spacerHeight = 0
 	}
 	spacer := strings.Repeat("\n", spacerHeight)
+	if spacer == "" {
+		spacer = "\n"
+	}
+	topSpacer := strings.Repeat("\n", topPad)
 
-	return docStyle.Render(lipgloss.JoinVertical(lipgloss.Left,
-		mainContent,
-		spacer,
-		helpStyle.Render(help),
-	))
+	if browsePlainEnabled() {
+		return topSpacer + mainContent + spacer + help
+	}
+	view := contentStyle.Render(mainContent) + spacer + helpStyle.Render(help)
+	if topSpacer != "" {
+		view = topSpacer + view
+	}
+	return applyLeftMargin(view, m.margin)
 }
 
 func newBrowseCmd() *cobra.Command {
@@ -338,7 +386,6 @@ func newBrowseCmd() *cobra.Command {
 		ValidArgsFunction: stateArgCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			browseMargin = loadBrowseMargin()
-			docStyle = lipgloss.NewStyle().Margin(0, browseMargin)
 
 			tasksPath, err := tasksDir()
 			if err != nil {
@@ -409,4 +456,247 @@ func loadBrowseMargin() int {
 		return config.DefaultBrowseMargin()
 	}
 	return cfg.BrowseMargin
+}
+
+func effectiveBrowseMargin(width int) int {
+	if width <= 0 {
+		return browseMargin
+	}
+	maxMargin := (width - 5) / 2
+	if maxMargin < 0 {
+		maxMargin = 0
+	}
+	if browseMargin > maxMargin {
+		return maxMargin
+	}
+	return browseMargin
+}
+
+func browseContentWidth(width, margin int) int {
+	contentWidth := width - (margin * 2) - 4
+	if contentWidth < 1 {
+		return 1
+	}
+	return contentWidth
+}
+
+func browseDebugEnabled() bool {
+	return strings.TrimSpace(os.Getenv("PIN_BROWSE_DEBUG")) != ""
+}
+
+func browsePlainEnabled() bool {
+	return strings.TrimSpace(os.Getenv("PIN_BROWSE_PLAIN")) != ""
+}
+
+func browseTopPadding(height, contentHeight, helpHeight int) int {
+	available := height - contentHeight - helpHeight
+	if available <= 0 {
+		return 0
+	}
+	return 1
+}
+
+func applyLeftMargin(text string, margin int) string {
+	if margin <= 0 {
+		return text
+	}
+	padding := strings.Repeat(" ", margin)
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		lines[i] = padding + line
+	}
+	return strings.Join(lines, "\n")
+}
+
+func renderBrowseContent(t *task.Task, width int) string {
+	age := formatAge(t.CreatedAt)
+	metaLine := fmt.Sprintf("%d %s (%s)", t.ID, t.State, age)
+	if len(t.Tags) > 0 {
+		metaLine = fmt.Sprintf("%s {%s}", metaLine, strings.Join(t.Tags, ","))
+	}
+	titleLine := lipgloss.NewStyle().Bold(true).Render(t.Title)
+
+	notes := sectionEntries(t.Body, "## Notes")
+	logs := sectionEntries(t.Body, "## Log")
+	details := browseBodyDetails(t.Title, t.Body)
+
+	lines := []string{metaLine, "", titleLine}
+	if details != "" {
+		lines = append(lines, "", details)
+	}
+	if len(notes) > 0 {
+		lines = append(lines, "", "NOTES", strings.Join(notes, "\n"))
+	}
+	if len(logs) > 0 {
+		lines = append(lines, "", "STATUS LOG", strings.Join(logs, "\n"))
+	}
+	block := strings.Join(lines, "\n")
+	if width <= 0 {
+		return block
+	}
+	return wrapBrowseText(block, width)
+}
+
+func stripTitleFromBody(title, body string) string {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return body
+	}
+	lines := strings.Split(body, "\n")
+	first := strings.TrimSpace(lines[0])
+	if strings.HasPrefix(first, "#") {
+		trimmed := strings.TrimSpace(strings.TrimLeft(first, "#"))
+		if strings.EqualFold(trimmed, strings.TrimSpace(title)) {
+			return strings.TrimSpace(strings.Join(lines[1:], "\n"))
+		}
+	}
+	return body
+}
+
+func wrapBrowseText(text string, width int) string {
+	if width <= 0 {
+		return text
+	}
+	style := lipgloss.NewStyle().Width(width)
+	return style.Render(text)
+}
+
+func formatFriendlyTimestamp(ts time.Time) string {
+	abs := ts.Local().Format("Jan 2, 2006 · 3:04pm")
+	rel := formatRelativeTime(ts)
+	if rel == "" {
+		return abs
+	}
+	return fmt.Sprintf("%s (%s)", abs, rel)
+}
+
+func formatRelativeTime(ts time.Time) string {
+	now := time.Now()
+	diff := now.Sub(ts)
+	if diff < 0 {
+		diff = -diff
+	}
+
+	const minute = time.Minute
+	const hour = time.Hour
+	const day = 24 * hour
+	const week = 7 * day
+	const month = 30 * day
+	const year = 365 * day
+
+	switch {
+	case diff < minute:
+		return "just now"
+	case diff < hour:
+		return pluralizeDuration(int(diff/minute), "minute")
+	case diff < day:
+		return pluralizeDuration(int(diff/hour), "hour")
+	case diff < week:
+		return pluralizeDuration(int(diff/day), "day")
+	case diff < month:
+		return pluralizeDuration(int(diff/week), "week")
+	case diff < year:
+		return pluralizeDuration(int(diff/month), "month")
+	default:
+		return pluralizeDuration(int(diff/year), "year")
+	}
+}
+
+func pluralizeDuration(value int, unit string) string {
+	if value == 1 {
+		return fmt.Sprintf("1 %s ago", unit)
+	}
+	return fmt.Sprintf("%d %ss ago", value, unit)
+}
+
+func sectionEntries(body, heading string) []string {
+	_, section, _, found := splitSection(body, heading)
+	if !found {
+		return nil
+	}
+	lines := strings.Split(section, "\n")
+	entries := make([]string, 0, len(lines))
+	for i, line := range lines {
+		if i == 0 && strings.HasPrefix(strings.TrimSpace(line), "##") {
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- ") {
+			trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+		}
+		entries = append(entries, formatEntryTimestamp(trimmed))
+	}
+	return entries
+}
+
+func browseBodyDetails(title, body string) string {
+	body = strings.TrimSpace(stripTitleFromBody(title, body))
+	if body == "" {
+		return ""
+	}
+	beforeNotes, _, afterNotes, notesFound := splitSection(body, "## Notes")
+	cleaned := body
+	if notesFound {
+		cleaned = joinBlocks(beforeNotes, afterNotes)
+	}
+	beforeLog, _, afterLog, logFound := splitSection(cleaned, "## Log")
+	if logFound {
+		cleaned = joinBlocks(beforeLog, afterLog)
+	}
+	return strings.TrimSpace(cleaned)
+}
+
+func formatEntryTimestamp(line string) string {
+	rest := strings.TrimSpace(line)
+	colonIdx := strings.Index(rest, ": ")
+	if colonIdx == -1 {
+		return line
+	}
+	rawTs := strings.TrimSpace(rest[:colonIdx])
+	parsed, err := time.Parse(time.RFC3339, rawTs)
+	if err != nil {
+		return line
+	}
+	chrono := parsed.Local().Format("2006-0102-1504")
+	return fmt.Sprintf("%s%s", chrono, rest[colonIdx:])
+}
+
+func formatAge(created time.Time) string {
+	now := time.Now()
+	diff := now.Sub(created)
+	if diff < 0 {
+		diff = -diff
+	}
+
+	days := int(diff / (24 * time.Hour))
+	diff -= time.Duration(days) * 24 * time.Hour
+	hours := int(diff / time.Hour)
+	diff -= time.Duration(hours) * time.Hour
+	minutes := int(diff / time.Minute)
+	diff -= time.Duration(minutes) * time.Minute
+	seconds := int(diff / time.Second)
+
+	switch {
+	case days > 0:
+		return fmt.Sprintf("%s, %s old", pluralizeAge(days, "day"), pluralizeAge(hours, "hour"))
+	case hours > 0:
+		return fmt.Sprintf("%s, %s old", pluralizeAge(hours, "hour"), pluralizeAge(minutes, "minute"))
+	case minutes > 0:
+		return fmt.Sprintf("%s, %s old", pluralizeAge(minutes, "minute"), pluralizeAge(seconds, "second"))
+	default:
+		if seconds < 1 {
+			return "just now"
+		}
+		return fmt.Sprintf("%s old", pluralizeAge(seconds, "second"))
+	}
+}
+
+func pluralizeAge(value int, unit string) string {
+	if value == 1 {
+		return fmt.Sprintf("1 %s", unit)
+	}
+	return fmt.Sprintf("%d %ss", value, unit)
 }

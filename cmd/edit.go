@@ -39,7 +39,7 @@ func newEditCmd() *cobra.Command {
 				editorArgs = append(editorArgs, "+startinsert")
 			}
 			if shouldStartGoyo(editorCommand) {
-				editorArgs = append(editorArgs, "+Goyo")
+				editorArgs = append(editorArgs, goyoArgs()...)
 			}
 			editorArgs = append(editorArgs, taskPath)
 
@@ -94,4 +94,8 @@ func shouldStartGoyo(editorCommand string) bool {
 	}
 	editorName := strings.ToLower(filepath.Base(editorCommand))
 	return editorName == "nvim" || editorName == "vim"
+}
+
+func goyoArgs() []string {
+	return []string{"+let g:goyo_quit_on_close=1", "+Goyo"}
 }

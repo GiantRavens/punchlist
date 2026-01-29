@@ -424,39 +424,6 @@ func TestSearchCmd(t *testing.T) {
 	}
 }
 
-// test log command behavior
-func TestLogCmd(t *testing.T) {
-	teardown := setupTest(t)
-	defer teardown()
-
-	// init and create a task
-	executeCommand("init")
-	executeCommand("todo", "My log test task")
-
-	// add a log entry
-	logMessage := "This is a test log message."
-	output, err := executeCommand("log", "1", logMessage)
-	if err != nil {
-		t.Fatalf("log command failed: %v", err)
-	}
-	if !strings.Contains(output, "Added log to task 1") {
-		t.Errorf("Expected success message, but got: %s", output)
-	}
-
-	// verify the log entry in the file
-	taskFile := "tasks/001-my-log-test-task.md"
-	content, err := os.ReadFile(taskFile)
-	if err != nil {
-		t.Fatalf("Failed to read task file: %v", err)
-	}
-	if !strings.Contains(string(content), logMessage) {
-		t.Errorf("Log message not found in task file. File content:\n%s", string(content))
-	}
-	if !strings.Contains(string(content), "## Log") {
-		t.Errorf("'## Log' section not found in task file. File content:\n%s", string(content))
-	}
-}
-
 func TestTagCmd(t *testing.T) {
 	teardown := setupTest(t)
 	defer teardown()
