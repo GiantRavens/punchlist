@@ -9,6 +9,7 @@ import (
 	"punchlist/config"
 	"punchlist/task"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -111,6 +112,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, textinput.Blink
 			case "x":
 				return applyStateChange(m, task.StateNotDo)
+			case "1", "2", "3", "4", "5", "6", "7", "8", "9", "0":
+				return applyPriorityChange(m, msg.String())
 			case "s":
 				m.mode = modeState
 				return m, nil
@@ -203,6 +206,42 @@ func applyStateChange(m model, newState task.State) (model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func applyPriorityChange(m model, key string) (model, tea.Cmd) {
+	if len(m.tasks) == 0 {
+		return m, nil
+	}
+	newPriority, ok := parsePriorityKey(key)
+	if !ok {
+		return m, nil
+	}
+	currentTask := m.tasks[m.cursor]
+	oldPriority := currentTask.Priority
+	if oldPriority != newPriority {
+		currentTask.Priority = newPriority
+		currentTask.UpdatedAt = time.Now()
+		logMsg := fmt.Sprintf("Priority changed from %d to %d", oldPriority, newPriority)
+		addLog(currentTask, logMsg)
+		if err := currentTask.Write(currentTask.Path); err != nil {
+			m.err = err
+		}
+	}
+	return m, nil
+}
+
+func parsePriorityKey(key string) (int, bool) {
+	if key == "0" {
+		return 10, true
+	}
+	value, err := strconv.Atoi(key)
+	if err != nil {
+		return 0, false
+	}
+	if value < 0 || value > 9 {
+		return 0, false
+	}
+	return value, true
 }
 
 func addNote(t *task.Task, message string) {
@@ -339,7 +378,7 @@ func (m model) View() string {
 		help = "t: todo  b: begun  d: done  k: block  c: confirm  n: notdo  esc: cancel"
 	default: // modeBrowse
 		help = "←/K: prev  →/J/space: next\n" +
-			"d:done  b:begun  t:todo  c:confirm  x:notdo  n:note  e:edit  q:quit"
+			"d:done  b:begun  t:todo  c:confirm  x:notdo  n:note  e:edit  1-0:pri  q:quit"
 	}
 	if debugEnabled {
 		titleLen := len([]rune(currentTask.Title))
@@ -385,6 +424,10 @@ func newBrowseCmd() *cobra.Command {
 		Long:              "Browse tasks one by one in an interactive full-screen viewer. Keys: \u2190/\u2192 to move, n to add a note, s to set state, e to edit, q to quit.",
 		ValidArgsFunction: stateArgCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if browseSmokeEnabled() {
+				fmt.Println("browse smoke ok")
+				return nil
+			}
 			browseMargin = loadBrowseMargin()
 
 			tasksPath, err := tasksDir()
@@ -440,6 +483,15 @@ func newBrowseCmd() *cobra.Command {
 				}
 				return ai < aj
 			})
+			if browseNoTuiEnabled() {
+				if len(allTasks) == 0 {
+					fmt.Println("No tasks found.")
+					return nil
+				}
+				contentWidth := 80
+				fmt.Println(renderBrowseContent(allTasks[0], contentWidth))
+				return nil
+			}
 			p := tea.NewProgram(initialModel(allTasks), tea.WithAltScreen())
 			if _, err := p.Run(); err != nil {
 				return fmt.Errorf("error running browse program: %w", err)
@@ -488,6 +540,18 @@ func browsePlainEnabled() bool {
 	return strings.TrimSpace(os.Getenv("PIN_BROWSE_PLAIN")) != ""
 }
 
+func browseNoWrapEnabled() bool {
+	return strings.TrimSpace(os.Getenv("PIN_BROWSE_NO_WRAP")) != ""
+}
+
+func browseNoTuiEnabled() bool {
+	return strings.TrimSpace(os.Getenv("PIN_BROWSE_NO_TUI")) != ""
+}
+
+func browseSmokeEnabled() bool {
+	return strings.TrimSpace(os.Getenv("PIN_BROWSE_SMOKE")) != ""
+}
+
 func browseTopPadding(height, contentHeight, helpHeight int) int {
 	available := height - contentHeight - helpHeight
 	if available <= 0 {
@@ -518,7 +582,9 @@ func renderBrowseContent(t *task.Task, width int) string {
 
 	notes := sectionEntries(t.Body, "## Notes")
 	logs := sectionEntries(t.Body, "## Log")
-	details := browseBodyDetails(t.Title, t.Body)
+	details := truncateBrowseBlock(browseBodyDetails(t.Title, t.Body))
+	notes = truncateBrowseEntries(notes)
+	logs = truncateBrowseEntries(logs)
 
 	lines := []string{metaLine, "", titleLine}
 	if details != "" {
@@ -532,9 +598,12 @@ func renderBrowseContent(t *task.Task, width int) string {
 	}
 	block := strings.Join(lines, "\n")
 	if width <= 0 {
-		return block
+		return truncateBrowseBlock(block)
 	}
-	return wrapBrowseText(block, width)
+	if browsePlainEnabled() || browseNoWrapEnabled() || len(block) > browseWrapLimit() {
+		return truncateBrowseBlock(block)
+	}
+	return wrapBrowseText(truncateBrowseBlock(block), width)
 }
 
 func stripTitleFromBody(title, body string) string {
@@ -559,6 +628,40 @@ func wrapBrowseText(text string, width int) string {
 	}
 	style := lipgloss.NewStyle().Width(width)
 	return style.Render(text)
+}
+
+func browseWrapLimit() int {
+	return 20000
+}
+
+func browseMaxContentLen() int {
+	return 12000
+}
+
+func truncateBrowseBlock(text string) string {
+	limit := browseMaxContentLen()
+	if limit <= 0 || len(text) <= limit {
+		return text
+	}
+	return text[:limit] + "\n… (truncated)"
+}
+
+func truncateBrowseEntries(entries []string) []string {
+	if len(entries) == 0 {
+		return entries
+	}
+	limit := browseMaxContentLen()
+	total := 0
+	out := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if total+len(entry) > limit {
+			out = append(out, "… (truncated)")
+			break
+		}
+		out = append(out, entry)
+		total += len(entry) + 1
+	}
+	return out
 }
 
 func formatFriendlyTimestamp(ts time.Time) string {

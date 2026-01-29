@@ -57,7 +57,7 @@ pin browse todo
 ```
 
 `pin browse` opens a keyboard-driven viewer with the current task, plus quick actions for adding notes
-and updating state (d/b/t/c/x, n for notes, e to edit, q to quit, arrows/J/K to move).
+and updating state (d/b/t/c/x, n for notes, e to edit, q to quit, arrows/J/K to move, 1-9/0 for priority).
 
 Updating task 'states':
 

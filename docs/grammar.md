@@ -109,6 +109,8 @@ You'll be taken to a TUI style interface with these hotkeys:
 - t: mark todo
 - c: mark confirm
 - x: mark notdo
+- 1-9: set priority 1-9
+- 0: set priority 10
 - q: quit
 
 ## Modify Task 'State'
