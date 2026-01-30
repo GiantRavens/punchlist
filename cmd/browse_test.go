@@ -19,7 +19,7 @@ func TestRenderBrowseContentShowsTitle(t *testing.T) {
 		Body:      "Details go here.",
 	}
 
-	content := renderBrowseContent(tsk, 80)
+	content := renderBrowseContent(tsk, 80, nil)
 	if strings.TrimSpace(content) == "" {
 		t.Fatal("expected non-empty browse content")
 	}

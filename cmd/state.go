@@ -291,14 +291,18 @@ func updateTaskStateSingle(id int, newState task.State) error {
 		return err
 	}
 
-	t.State = newState
-	t.UpdatedAt = time.Now()
-	if newState == task.StateBegun {
-		now := time.Now()
-		t.StartedAt = &now
-	} else if newState == task.StateDone {
-		now := time.Now()
-		t.CompletedAt = &now
+	oldState := t.State
+	if oldState != newState {
+		t.State = newState
+		t.UpdatedAt = time.Now()
+		if newState == task.StateBegun {
+			now := time.Now()
+			t.StartedAt = &now
+		} else if newState == task.StateDone {
+			now := time.Now()
+			t.CompletedAt = &now
+		}
+		addLog(t, fmt.Sprintf("State changed from %s to %s", oldState, newState))
 	}
 
 	if err := t.Write(taskPath); err != nil {

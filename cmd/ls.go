@@ -24,6 +24,11 @@ func newLsCmd() *cobra.Command {
 		Long:              `List tasks, optionally filtering by state, priority, and tags.`,
 		ValidArgsFunction: stateArgCompletion,
 		Run: func(cmd *cobra.Command, args []string) {
+			stateCatalog, err := loadStateCatalog()
+			if err != nil {
+				fmt.Printf("Error loading state config: %v\n", err)
+				return
+			}
 			// read filter and sort flags
 			lsPriority, _ := cmd.Flags().GetInt("pri")
 			lsTags, _ := cmd.Flags().GetStringSlice("tag")
@@ -36,7 +41,6 @@ func newLsCmd() *cobra.Command {
 
 			// scan tasks directory
 			var tasksPath string
-			var err error
 			if targetPath != "" {
 				root, err := punchlistRootFromPath(targetPath)
 				if err != nil {
@@ -63,7 +67,6 @@ func newLsCmd() *cobra.Command {
 			}
 
 			// parse optional state filter
-			var filterState task.State
 			stateToken := lsState
 			if stateToken == "" {
 				stateToken = lsStatus
@@ -80,13 +83,7 @@ func newLsCmd() *cobra.Command {
 			if stateToken == "" && len(remainingArgs) > 0 {
 				stateToken = remainingArgs[0]
 			}
-			if stateToken != "" {
-				if parsed, ok := task.ParseState(stateToken); ok {
-					filterState = parsed
-				} else {
-					filterState = task.State(stateToken)
-				}
-			}
+			filterToken := strings.TrimSpace(stateToken)
 
 			// load tasks and apply filters
 			var tasks []*task.Task
@@ -102,7 +99,7 @@ func newLsCmd() *cobra.Command {
 						return nil // continue walking
 					}
 
-					if filterState != "" && t.State != filterState {
+					if filterToken != "" && !compareState(stateCatalog, t.State, filterToken) {
 						return nil
 					}
 					if lsPriority != 0 && t.Priority != lsPriority {
@@ -142,7 +139,7 @@ func newLsCmd() *cobra.Command {
 			}
 
 			// order results
-			sortTasks(tasks, lsOrder, lsReverse)
+			sortTasks(tasks, lsOrder, lsReverse, stateCatalog)
 
 			// print aligned ids
 			idWidth := maxIDWidth(tasks)
@@ -151,19 +148,20 @@ func newLsCmd() *cobra.Command {
 				idWidth = configWidth
 			}
 			titleMaxLen := loadLsTitleMaxLen()
-			shouldGroupByState := filterState == "" &&
+			shouldGroupByState := filterToken == "" &&
 				lsPriority == 0 &&
 				len(lsTags) == 0 &&
 				strings.ToLower(strings.TrimSpace(lsOrder)) != "id"
-			var lastState task.State
+			var lastState string
 			for _, t := range tasks {
-				if shouldGroupByState && lastState != "" && t.State != lastState {
+				displayState := canonicalizeState(stateCatalog, t.State)
+				if shouldGroupByState && lastState != "" && displayState != lastState {
 					fmt.Println(stateSeparatorLine)
 				}
 				displayTitle := truncateWithEllipsis(t.Title, titleMaxLen)
 				lineParts := []string{
 					fmt.Sprintf("%*d", idWidth, t.ID),
-					string(t.State),
+					displayState,
 					displayTitle,
 				}
 				if t.Priority > 0 {
@@ -176,7 +174,7 @@ func newLsCmd() *cobra.Command {
 					lineParts = append(lineParts, fmt.Sprintf("{%s}", strings.Join(t.Tags, ",")))
 				}
 				fmt.Printf("%s\n", strings.Join(lineParts, " "))
-				lastState = t.State
+				lastState = displayState
 			}
 		},
 	}
@@ -200,7 +198,7 @@ func formatDueDate(t *time.Time) string {
 }
 
 // sort tasks by the requested ordering
-func sortTasks(tasks []*task.Task, order string, reverse bool) {
+func sortTasks(tasks []*task.Task, order string, reverse bool, catalog *config.StateCatalog) {
 	order = strings.ToLower(strings.TrimSpace(order))
 	switch order {
 	case "id":
@@ -211,11 +209,12 @@ func sortTasks(tasks []*task.Task, order string, reverse bool) {
 			return tasks[i].ID < tasks[j].ID
 		})
 	default:
-		stateOrder := loadStateOrder()
-		orderIndex := buildStateOrderIndex(stateOrder)
+		orderIndex := buildStateOrderIndex(catalog, tasks)
 		sort.Slice(tasks, func(i, j int) bool {
-			ai := orderIndex[stateOrderKey(tasks[i].State)]
-			aj := orderIndex[stateOrderKey(tasks[j].State)]
+			stateA := canonicalizeState(catalog, tasks[i].State)
+			stateB := canonicalizeState(catalog, tasks[j].State)
+			ai, _ := orderIndexForState(orderIndex, stateA)
+			aj, _ := orderIndexForState(orderIndex, stateB)
 			if ai == aj {
 				if reverse {
 					return tasks[i].ID > tasks[j].ID
@@ -230,15 +229,6 @@ func sortTasks(tasks []*task.Task, order string, reverse bool) {
 	}
 }
 
-// read state ordering from config
-func loadStateOrder() []string {
-	cfg, err := config.LoadConfig()
-	if err != nil || len(cfg.LsStateOrder) == 0 {
-		return config.DefaultLsStateOrder()
-	}
-	return cfg.LsStateOrder
-}
-
 // read id width from config
 func loadIDWidth() int {
 	cfg, err := config.LoadConfig()
@@ -246,32 +236,6 @@ func loadIDWidth() int {
 		return config.DefaultIDWidth()
 	}
 	return cfg.IDWidth
-}
-
-// build a lookup index from a state order list
-func buildStateOrderIndex(order []string) map[string]int {
-	index := make(map[string]int, len(order))
-	for i, label := range order {
-		if state, ok := normalizeOrderLabel(label); ok {
-			index[state] = i
-		}
-	}
-	defaultIndex := len(order)
-	for _, state := range []task.State{
-		task.StateBegun,
-		task.StateBlock,
-		task.StateTodo,
-		task.StateConfirm,
-		task.StateDone,
-		task.StateNotDo,
-	} {
-		key := stateOrderKey(state)
-		if _, ok := index[key]; !ok {
-			index[key] = defaultIndex
-			defaultIndex++
-		}
-	}
-	return index
 }
 
 // calculate width for right-aligned id output
@@ -284,33 +248,4 @@ func maxIDWidth(tasks []*task.Task) int {
 		}
 	}
 	return width
-}
-
-// normalize for state ordering map keys
-func stateOrderKey(state task.State) string {
-	return strings.ToUpper(string(state))
-}
-
-// normalize state labels from config for ordering
-func normalizeOrderLabel(label string) (string, bool) {
-	switch strings.ToUpper(strings.TrimSpace(label)) {
-	case "TODO":
-		return stateOrderKey(task.StateTodo), true
-	case "BEGUN", "DOING", "INPROGRESS", "IN-PROGRESS":
-		return stateOrderKey(task.StateBegun), true
-	case "BLOCK", "BLOCKED":
-		return stateOrderKey(task.StateBlock), true
-	case "CONFIRM", "FOLLOWUP", "FOLLOW-UP", "CHASE":
-		return stateOrderKey(task.StateConfirm), true
-	case "REVIEW":
-		return stateOrderKey(task.StateConfirm), true
-	case "DONE":
-		return stateOrderKey(task.StateDone), true
-	case "NOTDO", "DEFER", "DEFERRED":
-		return stateOrderKey(task.StateNotDo), true
-	case "WAITING":
-		return stateOrderKey(task.StateBlock), true
-	default:
-		return "", false
-	}
 }

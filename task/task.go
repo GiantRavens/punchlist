@@ -157,8 +157,9 @@ func parseFrontmatterLenient(frontmatter string) (*Task, error) {
 			task.Title = value
 			hasTitle = true
 		case "state":
-			if parsed, ok := ParseState(value); ok {
-				task.State = parsed
+			trimmed := strings.TrimSpace(value)
+			if trimmed != "" {
+				task.State = State(trimmed)
 				hasState = true
 			}
 		case "priority":

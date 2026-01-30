@@ -30,7 +30,6 @@ type viewMode int
 const (
 	modeBrowse viewMode = iota
 	modeNote
-	modeState
 )
 
 type editorFinishedMsg struct {
@@ -38,17 +37,20 @@ type editorFinishedMsg struct {
 }
 
 type model struct {
-	tasks     []*task.Task
-	cursor    int
-	width     int
-	height    int
-	margin    int
-	mode      viewMode
-	textinput textinput.Model
-	err       error
+	tasks         []*task.Task
+	cursor        int
+	width         int
+	height        int
+	margin        int
+	mode          viewMode
+	textinput     textinput.Model
+	err           error
+	stateCatalog  *config.StateCatalog
+	stateHotkeys  map[string]string
+	stateHelpLine string
 }
 
-func initialModel(tasks []*task.Task) model {
+func initialModel(tasks []*task.Task, catalog *config.StateCatalog) model {
 
 	ti := textinput.New()
 
@@ -58,13 +60,23 @@ func initialModel(tasks []*task.Task) model {
 
 	ti.Width = 80
 
+	stateHotkeys := map[string]string{}
+	stateHelp := ""
+	if catalog != nil {
+		stateHotkeys = catalog.HotkeyMap()
+		stateHelp = buildStateHelpLine(catalog)
+	}
+
 	return model{
-		tasks:     tasks,
-		cursor:    0,
-		margin:    browseMargin,
-		mode:      modeBrowse,
-		textinput: ti,
-		err:       nil,
+		tasks:         tasks,
+		cursor:        0,
+		margin:        browseMargin,
+		mode:          modeBrowse,
+		textinput:     ti,
+		err:           nil,
+		stateCatalog:  catalog,
+		stateHotkeys:  stateHotkeys,
+		stateHelpLine: stateHelp,
 	}
 }
 
@@ -97,26 +109,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.cursor < len(m.tasks)-1 {
 					m.cursor++
 				}
-			case "t":
-				return applyStateChange(m, task.StateTodo)
-			case "b":
-				return applyStateChange(m, task.StateBegun)
-			case "d":
-				return applyStateChange(m, task.StateDone)
-			case "c":
-				return applyStateChange(m, task.StateConfirm)
 			case "n":
 				m.mode = modeNote
 				m.textinput.Focus()
 				m.textinput.SetValue("") // clear previous input
 				return m, textinput.Blink
-			case "x":
-				return applyStateChange(m, task.StateNotDo)
 			case "1", "2", "3", "4", "5", "6", "7", "8", "9", "0":
 				return applyPriorityChange(m, msg.String())
-			case "s":
-				m.mode = modeState
-				return m, nil
 			case "e":
 				if len(m.tasks) == 0 {
 					return m, nil
@@ -134,6 +133,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.ExecProcess(cmdExec, func(err error) tea.Msg {
 					return editorFinishedMsg{err: err}
 				})
+			default:
+				if stateName, ok := m.stateHotkeys[msg.String()]; ok {
+					return applyStateChange(m, task.State(stateName))
+				}
 			}
 		case modeNote:
 			switch msg.String() {
@@ -154,31 +157,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textinput.Blur()
 				return m, nil
 			}
-		case modeState:
-			var newState task.State
-			switch msg.String() {
-			case "t":
-				newState = task.StateTodo
-			case "b":
-				newState = task.StateBegun
-			case "d":
-				newState = task.StateDone
-			case "k":
-				newState = task.StateBlock
-			case "c":
-				newState = task.StateConfirm
-			case "n":
-				newState = task.StateNotDo
-			case "esc", "q":
-				m.mode = modeBrowse
-				return m, nil
-			default:
-				return m, nil // no state change
-			}
-
-			m, _ = applyStateChange(m, newState)
-			m.mode = modeBrowse
-			return m, nil
 		}
 	case editorFinishedMsg:
 		if msg.err != nil {
@@ -298,7 +276,7 @@ func formatDisplayTimestamp(ts string) string {
 	return t.Local().Format("2006-01-02-1504")
 }
 
-func browseSummaryLine(t *task.Task, idWidth, contentWidth, titleMaxLen int) string {
+func browseSummaryLine(t *task.Task, idWidth, contentWidth, titleMaxLen int, catalog *config.StateCatalog) string {
 	if contentWidth <= 0 {
 		contentWidth = 1
 	}
@@ -306,7 +284,7 @@ func browseSummaryLine(t *task.Task, idWidth, contentWidth, titleMaxLen int) str
 	if contentWidth <= idWidth+1 {
 		idStr = fmt.Sprintf("%d", t.ID)
 	}
-	stateStr := string(t.State)
+	stateStr := canonicalizeState(catalog, t.State)
 
 	suffixParts := []string{}
 	if t.Priority > 0 {
@@ -368,17 +346,20 @@ func (m model) View() string {
 
 	currentTask := m.tasks[m.cursor]
 	contentWidth := browseContentWidth(m.width, m.margin)
-	mainContent = renderBrowseContent(currentTask, contentWidth)
+	mainContent = renderBrowseContent(currentTask, contentWidth, m.stateCatalog)
 	debugEnabled := browseDebugEnabled()
 
 	switch m.mode {
 	case modeNote:
 		help = "enter: save note  esc: cancel\n" + m.textinput.View()
-	case modeState:
-		help = "t: todo  b: begun  d: done  k: block  c: confirm  n: notdo  esc: cancel"
 	default: // modeBrowse
+		stateHelp := ""
+		if m.stateHelpLine != "" {
+			stateHelp = m.stateHelpLine + "  "
+		}
 		help = "←/K: prev  →/J/space: next\n" +
-			"d:done  b:begun  t:todo  c:confirm  x:notdo  n:note  e:edit  1-0:pri  q:quit"
+			stateHelp +
+			"n:note  e:edit  1-0:pri  q:quit"
 	}
 	if debugEnabled {
 		titleLen := len([]rune(currentTask.Title))
@@ -424,6 +405,10 @@ func newBrowseCmd() *cobra.Command {
 		Long:              "Browse tasks one by one in an interactive full-screen viewer. Keys: \u2190/\u2192 to move, n to add a note, s to set state, e to edit, q to quit.",
 		ValidArgsFunction: stateArgCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			stateCatalog, err := loadStateCatalog()
+			if err != nil {
+				return fmt.Errorf("error loading state config: %w", err)
+			}
 			if browseSmokeEnabled() {
 				fmt.Println("browse smoke ok")
 				return nil
@@ -443,13 +428,9 @@ func newBrowseCmd() *cobra.Command {
 				return nil
 			}
 
-			var filterState task.State
+			filterToken := ""
 			if len(args) > 0 {
-				if parsed, ok := task.ParseState(args[0]); ok {
-					filterState = parsed
-				} else {
-					filterState = task.State(args[0])
-				}
+				filterToken = strings.TrimSpace(args[0])
 			}
 
 			var allTasks []*task.Task
@@ -462,7 +443,7 @@ func newBrowseCmd() *cobra.Command {
 					if err != nil {
 						return nil
 					}
-					if filterState != "" && t.State != filterState {
+					if filterToken != "" && !compareState(stateCatalog, t.State, filterToken) {
 						return nil
 					}
 					allTasks = append(allTasks, t)
@@ -473,11 +454,12 @@ func newBrowseCmd() *cobra.Command {
 				return fmt.Errorf("error listing tasks: %w", err)
 			}
 
-			stateOrder := []string{"BEGUN", "TODO", "NOTDO", "DONE"}
-			orderIndex := buildStateOrderIndex(stateOrder)
+			orderIndex := buildStateOrderIndex(stateCatalog, allTasks)
 			sort.Slice(allTasks, func(i, j int) bool {
-				ai := orderIndex[stateOrderKey(allTasks[i].State)]
-				aj := orderIndex[stateOrderKey(allTasks[j].State)]
+				stateA := canonicalizeState(stateCatalog, allTasks[i].State)
+				stateB := canonicalizeState(stateCatalog, allTasks[j].State)
+				ai, _ := orderIndexForState(orderIndex, stateA)
+				aj, _ := orderIndexForState(orderIndex, stateB)
 				if ai == aj {
 					return allTasks[i].ID < allTasks[j].ID
 				}
@@ -489,10 +471,10 @@ func newBrowseCmd() *cobra.Command {
 					return nil
 				}
 				contentWidth := 80
-				fmt.Println(renderBrowseContent(allTasks[0], contentWidth))
+				fmt.Println(renderBrowseContent(allTasks[0], contentWidth, stateCatalog))
 				return nil
 			}
-			p := tea.NewProgram(initialModel(allTasks), tea.WithAltScreen())
+			p := tea.NewProgram(initialModel(allTasks, stateCatalog), tea.WithAltScreen())
 			if _, err := p.Run(); err != nil {
 				return fmt.Errorf("error running browse program: %w", err)
 			}
@@ -572,9 +554,9 @@ func applyLeftMargin(text string, margin int) string {
 	return strings.Join(lines, "\n")
 }
 
-func renderBrowseContent(t *task.Task, width int) string {
+func renderBrowseContent(t *task.Task, width int, catalog *config.StateCatalog) string {
 	age := formatAge(t.CreatedAt)
-	metaLine := fmt.Sprintf("%d %s (%s)", t.ID, t.State, age)
+	metaLine := fmt.Sprintf("%d %s (%s)", t.ID, canonicalizeState(catalog, t.State), age)
 	if len(t.Tags) > 0 {
 		metaLine = fmt.Sprintf("%s {%s}", metaLine, strings.Join(t.Tags, ","))
 	}
@@ -636,6 +618,22 @@ func browseWrapLimit() int {
 
 func browseMaxContentLen() int {
 	return 12000
+}
+
+func buildStateHelpLine(catalog *config.StateCatalog) string {
+	if catalog == nil {
+		return ""
+	}
+	ordered := catalog.SortStates()
+	parts := []string{}
+	for _, st := range ordered {
+		if strings.TrimSpace(st.TuiHotkey) == "" {
+			continue
+		}
+		label := strings.ToLower(st.Name)
+		parts = append(parts, fmt.Sprintf("%s:%s", st.TuiHotkey, label))
+	}
+	return strings.Join(parts, "  ")
 }
 
 func truncateBrowseBlock(text string) string {

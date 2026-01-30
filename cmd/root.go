@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"punchlist/task"
 )
 
 // build the root command and all subcommands
@@ -45,7 +47,7 @@ List and modify tasks:
   pin del 12
   pin compact
 
-State aliases: confirm = review/followup, block = waiting. Uppercase forms are accepted.
+States, aliases, and browse hotkeys are configured in .punchlist/config.yaml (single-word tokens).
 Config highlights: edit_goyo enables +Goyo for vim/nvim; browse_margin widens browse gutters.
 
 Zsh cwd hook snippet (optional, for prompt or env):
@@ -104,6 +106,18 @@ func Execute() {
 	root := NewRootCmd()
 	args := os.Args[1:]
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") && !isSubcommand(root, args[0]) && !isCobraCompletionCmd(args[0]) {
+		if len(args) > 1 {
+			if ids, err := parseTaskIDs(args[1:]); err == nil {
+				stateCatalog, err := loadStateCatalog()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error loading state config: %v\n", err)
+					os.Exit(1)
+				}
+				newState := task.State(stateCatalog.Canonicalize(args[0]))
+				updateTaskState(ids, newState)
+				return
+			}
+		}
 		// treat bare args as task creation
 		if err := createTaskFromArgs(args); err != nil {
 			if printNotPunchlistError(err) {

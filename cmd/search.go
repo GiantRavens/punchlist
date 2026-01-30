@@ -18,6 +18,11 @@ func newSearchCmd() *cobra.Command {
 		Short: "Search tasks by text",
 		Long:  "Search tasks by text across frontmatter, title, and body/notes (excluding logs).",
 		Run: func(cmd *cobra.Command, args []string) {
+			stateCatalog, err := loadStateCatalog()
+			if err != nil {
+				fmt.Printf("Error loading state config: %v\n", err)
+				return
+			}
 			// read filter and sort flags
 			lsPriority, _ := cmd.Flags().GetInt("pri")
 			lsTags, _ := cmd.Flags().GetStringSlice("tag")
@@ -41,7 +46,6 @@ func newSearchCmd() *cobra.Command {
 
 			// scan tasks directory
 			var tasksPath string
-			var err error
 			if targetPath != "" {
 				root, err := punchlistRootFromPath(targetPath)
 				if err != nil {
@@ -68,7 +72,6 @@ func newSearchCmd() *cobra.Command {
 			}
 
 			// parse optional state filter (flag only for search)
-			var filterState task.State
 			stateToken := lsState
 			if stateToken == "" {
 				stateToken = lsStatus
@@ -76,13 +79,7 @@ func newSearchCmd() *cobra.Command {
 				fmt.Println("Error: state provided twice (use either --state or --status)")
 				return
 			}
-			if stateToken != "" {
-				if parsed, ok := task.ParseState(stateToken); ok {
-					filterState = parsed
-				} else {
-					filterState = task.State(stateToken)
-				}
-			}
+			filterToken := strings.TrimSpace(stateToken)
 
 			// load tasks and apply filters
 			var tasks []*task.Task
@@ -98,7 +95,7 @@ func newSearchCmd() *cobra.Command {
 						return nil // continue walking
 					}
 
-					if filterState != "" && t.State != filterState {
+					if filterToken != "" && !compareState(stateCatalog, t.State, filterToken) {
 						return nil
 					}
 					if lsPriority != 0 && t.Priority != lsPriority {
@@ -152,7 +149,7 @@ func newSearchCmd() *cobra.Command {
 			}
 
 			// order results
-			sortTasks(tasks, lsOrder, lsReverse)
+			sortTasks(tasks, lsOrder, lsReverse, stateCatalog)
 
 			// print aligned ids
 			idWidth := maxIDWidth(tasks)
@@ -161,17 +158,18 @@ func newSearchCmd() *cobra.Command {
 				idWidth = configWidth
 			}
 			titleMaxLen := loadLsTitleMaxLen()
-			shouldGroupByState := filterState == "" &&
+			shouldGroupByState := filterToken == "" &&
 				strings.ToLower(strings.TrimSpace(lsOrder)) != "id"
-			var lastState task.State
+			var lastState string
 			for _, t := range tasks {
-				if shouldGroupByState && lastState != "" && t.State != lastState {
+				displayState := canonicalizeState(stateCatalog, t.State)
+				if shouldGroupByState && lastState != "" && displayState != lastState {
 					fmt.Println(stateSeparatorLine)
 				}
 				displayTitle := truncateWithEllipsis(t.Title, titleMaxLen)
 				lineParts := []string{
 					fmt.Sprintf("%*d", idWidth, t.ID),
-					string(t.State),
+					displayState,
 					displayTitle,
 				}
 				if t.Priority > 0 {
@@ -184,7 +182,7 @@ func newSearchCmd() *cobra.Command {
 					lineParts = append(lineParts, fmt.Sprintf("{%s}", strings.Join(t.Tags, ",")))
 				}
 				fmt.Printf("%s\n", strings.Join(lineParts, " "))
-				lastState = t.State
+				lastState = displayState
 			}
 		},
 	}

@@ -9,18 +9,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"punchlist/config"
 	"punchlist/task"
 )
-
-// canonical state tokens for shell completion
-var stateCompletionCandidates = []string{
-	"TODO",
-	"BEGUN",
-	"BLOCK",
-	"CONFIRM",
-	"DONE",
-	"NOTDO",
-}
 
 // complete a single state argument for commands like ls
 func stateArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
@@ -36,19 +27,26 @@ func rootArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]
 		return stateCompletions(toComplete), cobra.ShellCompDirectiveNoFileComp
 	}
 
-	state, ok := task.ParseState(args[0])
-	if !ok {
+	stateCatalog, err := loadStateCatalog()
+	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
+	stateName := strings.ToUpper(strings.TrimSpace(args[0]))
+	if stateCatalog != nil {
+		if canonical, ok := stateCatalog.Resolve(args[0]); ok {
+			stateName = strings.ToUpper(canonical)
+		}
+	}
 
-	switch state {
-	case task.StateTodo:
+	switch stateName {
+	case "TODO":
 		return nil, cobra.ShellCompDirectiveNoFileComp
-	case task.StateBegun:
-		return taskIDCompletions([]task.State{task.StateTodo}, toComplete), cobra.ShellCompDirectiveNoFileComp
-	case task.StateDone:
+	case "BEGUN":
+		return taskIDCompletions(stateCatalog, []string{"TODO"}, toComplete), cobra.ShellCompDirectiveNoFileComp
+	case "DONE":
 		return taskIDCompletions(
-			[]task.State{task.StateBegun, task.StateConfirm, task.StateTodo},
+			stateCatalog,
+			[]string{"BEGUN", "CONFIRM", "TODO"},
 			toComplete,
 		), cobra.ShellCompDirectiveNoFileComp
 	default:
@@ -58,13 +56,17 @@ func rootArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]
 
 // filter state completions by prefix
 func stateCompletions(toComplete string) []cobra.Completion {
+	candidates := stateCompletionCandidates()
+	if len(candidates) == 0 {
+		return nil
+	}
 	if toComplete == "" {
-		return stringsToCompletions(stateCompletionCandidates)
+		return stringsToCompletions(candidates)
 	}
 
 	upper := strings.ToUpper(toComplete)
-	filtered := make([]string, 0, len(stateCompletionCandidates))
-	for _, candidate := range stateCompletionCandidates {
+	filtered := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
 		if strings.HasPrefix(candidate, upper) {
 			filtered = append(filtered, candidate)
 		}
@@ -82,15 +84,16 @@ func stringsToCompletions(values []string) []cobra.Completion {
 }
 
 // return id completions for tasks in the given state order
-func taskIDCompletions(stateOrder []task.State, toComplete string) []cobra.Completion {
-	tasksByState := loadTasksByState()
+func taskIDCompletions(catalog *config.StateCatalog, stateOrder []string, toComplete string) []cobra.Completion {
+	tasksByState := loadTasksByState(catalog)
 	if len(tasksByState) == 0 {
 		return nil
 	}
 
 	completions := []cobra.Completion{}
 	for _, state := range stateOrder {
-		tasks := tasksByState[state]
+		stateKey := strings.ToUpper(strings.TrimSpace(state))
+		tasks := tasksByState[stateKey]
 		if len(tasks) == 0 {
 			continue
 		}
@@ -112,7 +115,7 @@ func taskIDCompletions(stateOrder []task.State, toComplete string) []cobra.Compl
 }
 
 // load tasks grouped by state from the tasks directory
-func loadTasksByState() map[task.State][]*task.Task {
+func loadTasksByState(catalog *config.StateCatalog) map[string][]*task.Task {
 	tasksPath, err := tasksDir()
 	if err != nil {
 		return nil
@@ -122,7 +125,7 @@ func loadTasksByState() map[task.State][]*task.Task {
 		return nil
 	}
 
-	tasksByState := make(map[task.State][]*task.Task)
+	tasksByState := make(map[string][]*task.Task)
 	_ = filepath.WalkDir(tasksPath, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -136,9 +139,34 @@ func loadTasksByState() map[task.State][]*task.Task {
 			return nil
 		}
 
-		tasksByState[t.State] = append(tasksByState[t.State], t)
+		canonical := canonicalizeState(catalog, t.State)
+		key := strings.ToUpper(strings.TrimSpace(canonical))
+		if key != "" {
+			tasksByState[key] = append(tasksByState[key], t)
+		}
 		return nil
 	})
 
 	return tasksByState
+}
+
+func stateCompletionCandidates() []string {
+	stateCatalog, err := loadStateCatalog()
+	if err != nil || stateCatalog == nil {
+		return []string{}
+	}
+	seen := map[string]struct{}{}
+	candidates := []string{}
+	for _, name := range stateCatalog.Order {
+		upper := strings.ToUpper(strings.TrimSpace(name))
+		if upper == "" {
+			continue
+		}
+		if _, ok := seen[upper]; ok {
+			continue
+		}
+		seen[upper] = struct{}{}
+		candidates = append(candidates, upper)
+	}
+	return candidates
 }

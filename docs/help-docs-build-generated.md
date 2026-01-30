@@ -44,7 +44,7 @@ pin del 12
 pin compact
 ```
 
-State aliases: confirm = review/followup, block = waiting. Uppercase forms are accepted. Config highlights: edit_goyo enables +Goyo for vim/nvim; browse_margin widens browse gutters.
+States, aliases, and browse hotkeys are configured in .punchlist/config.yaml (single-word tokens). Any state token can update tasks via `pin <STATE> <ids>`. Config highlights: edit_goyo enables +Goyo for vim/nvim; browse_margin widens browse gutters.
 
 ## Zsh cwd hook snippet (optional, for prompt or env)
 
@@ -82,7 +82,8 @@ pin, punchlist
 | `block` | Change a task's status to BLOCKED |
 | `browse` | Browse tasks in an interactive viewer |
 | `compact` | Compact task IDs into a contiguous sequence |
-| `config` | Show the current configuration |
+| `config` | Open the current configuration in your editor |
+| `config migrate` | Backfill missing config fields with defaults |
 | `confirm` | Mark a task as needing confirmation |
 | `del` | Move a task to the trash |
 | `done` | Complete a task |

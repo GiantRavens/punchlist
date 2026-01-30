@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"punchlist/config"
-	"punchlist/task"
 )
 
 func punchlistRoot() (string, error) {
@@ -41,9 +40,14 @@ func extractTargetPath(args []string) (string, []string) {
 	if isPathToken(args[0]) {
 		return args[0], args[1:]
 	}
-	if _, ok := task.ParseState(args[0]); ok && len(args) > 1 && isPathToken(args[1]) {
-		remaining := append([]string{args[0]}, args[2:]...)
-		return args[1], remaining
+	if len(args) > 1 && isPathToken(args[1]) {
+		stateCatalog, err := loadStateCatalog()
+		if err == nil && stateCatalog != nil {
+			if _, ok := stateCatalog.Resolve(args[0]); ok {
+				remaining := append([]string{args[0]}, args[2:]...)
+				return args[1], remaining
+			}
+		}
 	}
 	return "", args
 }

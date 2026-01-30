@@ -58,6 +58,7 @@ func newInitCmd() *cobra.Command {
 				NextID:          1,
 				IDWidth:         config.DefaultIDWidth(),
 				LsStateOrder:    config.DefaultLsStateOrder(),
+				States:          config.DefaultStates(),
 				EditStartInsert: &defaultStartInsert,
 				EditGoyo:        &defaultEditGoyo,
 				BrowseMargin:    config.DefaultBrowseMargin(),

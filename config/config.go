@@ -17,14 +17,15 @@ var ErrPunchlistNotFound = errors.New("punchlist directory not found")
 
 // config holds persisted settings for a punchlist scope
 type Config struct {
-	NextID          int      `yaml:"next_id"`
-	IDWidth         int      `yaml:"id_width,omitempty"`
-	LsStateOrder    []string `yaml:"ls_state_order,omitempty"`
-	EditStartInsert *bool    `yaml:"edit_start_insert,omitempty"`
-	EditGoyo        *bool    `yaml:"edit_goyo,omitempty"`
-	BrowseMargin    int      `yaml:"browse_margin,omitempty"`
-	TitleMaxLen     int      `yaml:"title_max_len,omitempty"`
-	LsTitleMaxLen   int      `yaml:"ls_title_max_len,omitempty"`
+	NextID          int           `yaml:"next_id"`
+	IDWidth         int           `yaml:"id_width,omitempty"`
+	LsStateOrder    []string      `yaml:"ls_state_order,omitempty"`
+	States          []StateConfig `yaml:"states,omitempty"`
+	EditStartInsert *bool         `yaml:"edit_start_insert,omitempty"`
+	EditGoyo        *bool         `yaml:"edit_goyo,omitempty"`
+	BrowseMargin    int           `yaml:"browse_margin,omitempty"`
+	TitleMaxLen     int           `yaml:"title_max_len,omitempty"`
+	LsTitleMaxLen   int           `yaml:"ls_title_max_len,omitempty"`
 }
 
 // default id width for filename padding
@@ -34,7 +35,7 @@ func DefaultIDWidth() int {
 
 // default state order for ls
 func DefaultLsStateOrder() []string {
-	return []string{"BEGUN", "BLOCK", "TODO", "CONFIRM", "DONE", "NOTDO"}
+	return []string{"TODO", "BEGUN", "FOLLOWUP", "DEFER", "NOTDO", "DONE"}
 }
 
 // default editor insert-mode behavior for vim-style editors

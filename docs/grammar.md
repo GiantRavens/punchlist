@@ -15,6 +15,7 @@ modifiers:
 - `pri:<int>` or `priority:<int>`
 - `by:<date>` or `due:<date>`
 - `tags:{a,b,c}`
+- `state:<token>`
 
 examples of the kinds of actions you can take as quick one liners from the command line:
 
@@ -48,7 +49,7 @@ and you'll just see all open TODO tickets.
 pin ls [path] [state] [flags]
 ```
 
-Note that --status and --state are aliases, and you can list any task state (TODO, BEGUN, BLOCK, CONFIRM, DONE, NOTDO).
+Note that --status and --state are aliases, and you can list any configured state (states/aliases live in `.punchlist/config.yaml`).
 
 path is optional and must start with `.` or `/`.
 
@@ -98,17 +99,12 @@ To do that issue:
 
 `pin browse`
 
-You'll be taken to a TUI style interface with these hotkeys:
+You'll be taken to a TUI style interface with these hotkeys (state hotkeys are configured in `.punchlist/config.yaml`):
 
 - left/K: previous ticket
 - right/J/space: next ticket
 - n: add a note
 - e: edit in your editor
-- d: mark done
-- b: mark begun
-- t: mark todo
-- c: mark confirm
-- x: mark notdo
 - 1-9: set priority 1-9
 - 0: set priority 10
 - q: quit
@@ -140,7 +136,7 @@ pin begun "triage the backlog"
 pin block "waiting on vendor response"
 ```
 
-State commands accept uppercase aliases and a few synonyms (for example: `pin TODO 1,2,3`, `pin DONE 1,2,3`, `pin REVIEW 12`, `pin WAITING 12`, `pin FOLLOWUP 12`).
+State names and aliases are configurable in `.punchlist/config.yaml` (single-word tokens). You can use `pin <state> <ids>` for any state token.
 
 ## Edit a Task
 

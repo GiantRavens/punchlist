@@ -57,7 +57,7 @@ pin browse todo
 ```
 
 `pin browse` opens a keyboard-driven viewer with the current task, plus quick actions for adding notes
-and updating state (d/b/t/c/x, n for notes, e to edit, q to quit, arrows/J/K to move, 1-9/0 for priority).
+and updating state (configurable hotkeys; n for notes, e to edit, q to quit, arrows/J/K to move, 1-9/0 for priority).
 
 Updating task 'states':
 
@@ -73,7 +73,26 @@ pin begun "triage the backlog"
 pin block "waiting on vendor response"
 ```
 
-State commands accept uppercase aliases and a few synonyms (for example: `pin TODO 12`, `pin DONE 12`, `pin REVIEW 12`, `pin WAITING 12`, `pin FOLLOWUP 12`).
+State names, aliases, and browse hotkeys are configured in `.punchlist/config.yaml` (single-word tokens).
+Any state token can be used to update existing tasks: `pin REDLIGHT 12`.
+
+Edit config quickly:
+
+```bash
+pin config
+pin config migrate
+```
+
+Default states (from `pin init`) are:
+
+- `TODO` (aliases: todo, hotkey: t)
+- `BEGUN` (aliases: begun, started, inprogress, hotkey: b)
+- `FOLLOWUP` (aliases: followup, confirm, hotkey: f)
+- `DEFER` (aliases: defer, hotkey: l)
+- `NOTDO` (aliases: notdo, hotkey: x)
+- `DONE` (aliases: done, complete, completed, hotkey: d)
+
+You can add or rename states by editing the `states:` list in `.punchlist/config.yaml`. Browse and list commands will respect the configured ordering and append any unknown states at the end.
 
 Add notes to existing tasks:
 
@@ -190,11 +209,18 @@ _punchlist_maybe_notice() {
 - `next_id`: next task id
 - `id_width`: zero padding width for filenames (default 3)
 - `ls_state_order`: custom state ordering for `pin ls`
+- `states`: list of state definitions with `name`, `aliases`, and `tui_hotkey`
 - `edit_start_insert`: when true, add `+startinsert` for vim/nvim (default true)
 - `edit_goyo`: when true, add `+Goyo` for vim/nvim (default false)
 - `browse_margin`: columns of left/right margin in `pin browse` (default 12)
 - `title_max_len`: max stored title length before truncation (default 80)
 - `ls_title_max_len`: max title length shown in `pin ls` (default 80)
+
+State config notes:
+
+- `name` and each alias must be single-word tokens (no spaces).
+- `tui_hotkey` must be a single character and cannot conflict with reserved keys (`n`, `q`, `j`, `k`, `J`, `K`, space, `e`, `0-9`).
+- `pin config migrate` backfills `states` and `ls_state_order` into older configs without overwriting your existing values.
 
 ## Using punchlist with AI coding assistants
 

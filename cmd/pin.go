@@ -17,6 +17,7 @@ type createOptions struct {
 	priority int
 	due      *time.Time
 	tags     []string
+	state    string
 }
 
 // create a task from free-form args
@@ -47,9 +48,24 @@ func createTaskFromArgsInDir(args []string) error {
 		mods  []string
 	)
 
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		return fmt.Errorf("error loading config: %w", err)
+	}
+	stateCatalog, err := config.BuildStateCatalog(cfg)
+	if err != nil {
+		return fmt.Errorf("error loading state config: %w", err)
+	}
+
 	// parse optional leading state
-	if parsed, ok := task.ParseState(args[0]); ok {
+	if canonical, ok := stateCatalog.Resolve(args[0]); ok {
+		state = task.State(canonical)
+		args = args[1:]
+	} else if parsed, ok := task.ParseState(args[0]); ok {
 		state = parsed
+		args = args[1:]
+	} else if isUpperStateToken(args[0]) {
+		state = task.State(stateCatalog.Canonicalize(args[0]))
 		args = args[1:]
 	} else {
 		state = task.StateTodo
@@ -67,10 +83,8 @@ func createTaskFromArgsInDir(args []string) error {
 		return err
 	}
 
-	// load config and increment id
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		return fmt.Errorf("error loading config: %w", err)
+	if strings.TrimSpace(opts.state) != "" {
+		state = task.State(stateCatalog.Canonicalize(opts.state))
 	}
 
 	fullTitle := title
@@ -159,6 +173,8 @@ func parseCreateModifiers(args []string) (createOptions, error) {
 			opts.due = parsed
 		case "tags":
 			opts.tags = parseTags(value)
+		case "state":
+			opts.state = value
 		default:
 			return opts, fmt.Errorf("unknown modifier: %s", key)
 		}
@@ -175,6 +191,7 @@ func splitTitleAndModifiers(args []string) (string, []string, error) {
 
 	var titleParts []string
 	var mods []string
+	foundTitle := false
 
 	for i := 0; i < len(args); i++ {
 		key, value, ok, inline := parseModifierToken(args[i])
@@ -211,7 +228,11 @@ func splitTitleAndModifiers(args []string) (string, []string, error) {
 			continue
 		}
 
+		if foundTitle {
+			return "", nil, fmt.Errorf("title must be quoted")
+		}
 		titleParts = append(titleParts, args[i])
+		foundTitle = true
 	}
 
 	title := strings.TrimSpace(strings.Join(titleParts, " "))
@@ -247,6 +268,8 @@ func normalizeModifierKey(key string) (string, bool) {
 		return "due", true
 	case "tags", "tag":
 		return "tags", true
+	case "state":
+		return "state", true
 	default:
 		return "", false
 	}
@@ -270,6 +293,23 @@ func parseTags(value string) []string {
 		tags = append(tags, tag)
 	}
 	return tags
+}
+
+func isUpperStateToken(token string) bool {
+	trimmed := strings.TrimSpace(token)
+	if trimmed == "" {
+		return false
+	}
+	hasLetter := false
+	for _, r := range trimmed {
+		if r >= 'a' && r <= 'z' {
+			return false
+		}
+		if r >= 'A' && r <= 'Z' {
+			hasLetter = true
+		}
+	}
+	return hasLetter && trimmed == strings.ToUpper(trimmed)
 }
 
 // parse due dates in natural and structured formats
