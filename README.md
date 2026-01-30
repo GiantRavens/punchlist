@@ -31,6 +31,7 @@ Examples of creating tasks:
 pin todo "write release plan" pri:1 by:2026-01-09 tags:{launch,pr}
 pin todo ../homeprojects "draft release email"
 pin done "shipped quick fix for onboarding typo"
+pin --version
 ```
 
 Listing and inspecting tasks:

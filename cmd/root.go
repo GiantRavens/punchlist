@@ -72,7 +72,9 @@ Zsh cwd hook snippet (optional, for prompt or env):
 		Short:             "A text-native, AI-friendly task and ticket system.",
 		Long:              longDesc,
 		ValidArgsFunction: rootArgCompletion,
+		Version:           Version,
 	}
+	cmd.SetVersionTemplate("pin {{.Version}}\n")
 
 	cmd.AddCommand(newBlockCmd())
 	cmd.AddCommand(newBrowseCmd())
