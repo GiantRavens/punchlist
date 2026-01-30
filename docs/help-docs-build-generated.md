@@ -101,6 +101,7 @@ pin, punchlist
 
 ## Flags
 
-- `-h, --help   help for pin`
+- `-h, --help      help for pin`
+- `-v, --version   version for pin`
 
 Use "pin [command] --help" for more information about a command.
