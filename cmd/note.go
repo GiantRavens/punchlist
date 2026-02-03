@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"punchlist/task"
 	"strconv"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -22,7 +22,7 @@ func newNoteCmd() *cobra.Command {
 
 			id, err := strconv.Atoi(idStr)
 			if err != nil {
-				fmt.Printf("Invalid task ID: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Invalid task ID: %v\n", err)
 				return
 			}
 
@@ -31,40 +31,20 @@ func newNoteCmd() *cobra.Command {
 				if printNotPunchlistError(err) {
 					return
 				}
-				fmt.Printf("Error finding task: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error finding task: %v\n", err)
 				return
 			}
 
 			t, err := task.Parse(taskPath)
 			if err != nil {
-				fmt.Printf("Error parsing task: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error parsing task: %v\n", err)
 				return
 			}
 
-			// add a timestamped entry
-			noteEntry := fmt.Sprintf("- %s: %s", time.Now().Format(time.RFC3339), message)
-
-			pre, logSection, afterLog, logFound := splitSection(t.Body, "## Log")
-			if logFound {
-				pre += afterLog
-			}
-
-			beforeNotes, notesSection, afterNotes, notesFound := splitSection(pre, "## Notes")
-			if !notesFound {
-				notesSection = "## Notes"
-			}
-
-			notesSection = appendEntry(notesSection, noteEntry)
-			pre = joinBlocks(beforeNotes, notesSection, afterNotes)
-			if logFound {
-				t.Body = joinBlocks(pre, logSection)
-			} else {
-				t.Body = pre
-			}
-			t.UpdatedAt = time.Now()
+			addNote(t, message)
 
 			if err := t.Write(taskPath); err != nil {
-				fmt.Printf("Error updating task: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error updating task: %v\n", err)
 				return
 			}
 

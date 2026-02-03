@@ -279,5 +279,9 @@ func (t *Task) Write(filePath string) error {
 		}
 	}
 
-	return os.WriteFile(filePath, buf.Bytes(), 0644)
+	tmpPath := filePath + ".tmp"
+	if err := os.WriteFile(tmpPath, buf.Bytes(), 0644); err != nil {
+		return fmt.Errorf("failed to write temp file: %w", err)
+	}
+	return os.Rename(tmpPath, filePath)
 }

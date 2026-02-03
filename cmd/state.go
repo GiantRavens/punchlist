@@ -7,7 +7,6 @@ import (
 	"punchlist/task"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -56,11 +55,11 @@ func newTodoCmd() *cobra.Command {
 			if err != nil {
 				if shouldCreateStateFromArgs(args) {
 					if err := createTaskFromArgs(append([]string{string(task.StateTodo)}, args...)); err != nil {
-						fmt.Printf("Failed to create todo task: %v\n", err)
+						fmt.Fprintf(os.Stderr, "Failed to create todo task: %v\n", err)
 					}
 					return
 				}
-				fmt.Printf("Invalid task IDs: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Invalid task IDs: %v\n", err)
 				return
 			}
 			updateTaskState(ids, task.StateTodo)
@@ -81,11 +80,11 @@ func newStartCmd() *cobra.Command {
 			if err != nil {
 				if shouldCreateStateFromArgs(args) {
 					if err := createTaskFromArgs(append([]string{string(task.StateBegun)}, args...)); err != nil {
-						fmt.Printf("Failed to create begun task: %v\n", err)
+						fmt.Fprintf(os.Stderr, "Failed to create begun task: %v\n", err)
 					}
 					return
 				}
-				fmt.Printf("Invalid task IDs: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Invalid task IDs: %v\n", err)
 				return
 			}
 			updateTaskState(ids, task.StateBegun)
@@ -106,11 +105,11 @@ func newDoneCmd() *cobra.Command {
 			if err != nil {
 				if shouldCreateStateFromArgs(args) {
 					if err := createTaskFromArgs(append([]string{string(task.StateDone)}, args...)); err != nil {
-						fmt.Printf("Failed to create done task: %v\n", err)
+						fmt.Fprintf(os.Stderr, "Failed to create done task: %v\n", err)
 					}
 					return
 				}
-				fmt.Printf("Invalid task IDs: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Invalid task IDs: %v\n", err)
 				return
 			}
 			updateTaskState(ids, task.StateDone)
@@ -205,11 +204,11 @@ func newDeferCmd() *cobra.Command {
 			if err != nil {
 				if shouldCreateStateFromArgs(args) {
 					if err := createTaskFromArgs(append([]string{string(task.StateNotDo)}, args...)); err != nil {
-						fmt.Printf("Failed to create notdo task: %v\n", err)
+						fmt.Fprintf(os.Stderr, "Failed to create notdo task: %v\n", err)
 					}
 					return
 				}
-				fmt.Printf("Invalid task IDs: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Invalid task IDs: %v\n", err)
 				return
 			}
 			updateTaskState(ids, task.StateNotDo)
@@ -230,11 +229,11 @@ func newBlockCmd() *cobra.Command {
 			if err != nil {
 				if shouldCreateStateFromArgs(args) {
 					if err := createTaskFromArgs(append([]string{string(task.StateBlock)}, args...)); err != nil {
-						fmt.Printf("Failed to create block task: %v\n", err)
+						fmt.Fprintf(os.Stderr, "Failed to create block task: %v\n", err)
 					}
 					return
 				}
-				fmt.Printf("Invalid task IDs: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Invalid task IDs: %v\n", err)
 				return
 			}
 			updateTaskState(ids, task.StateBlock)
@@ -255,11 +254,11 @@ func newConfirmCmd() *cobra.Command {
 			if err != nil {
 				if shouldCreateStateFromArgs(args) {
 					if err := createTaskFromArgs(append([]string{string(task.StateConfirm)}, args...)); err != nil {
-						fmt.Printf("Failed to create confirm task: %v\n", err)
+						fmt.Fprintf(os.Stderr, "Failed to create confirm task: %v\n", err)
 					}
 					return
 				}
-				fmt.Printf("Invalid task IDs: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Invalid task IDs: %v\n", err)
 				return
 			}
 			updateTaskState(ids, task.StateConfirm)
@@ -274,7 +273,7 @@ func updateTaskState(ids []int, newState task.State) {
 			if printNotPunchlistError(err) {
 				return
 			}
-			fmt.Printf("Error updating task %d: %v\n", id, err)
+			fmt.Fprintf(os.Stderr, "Error updating task %d: %v\n", id, err)
 		}
 	}
 }
@@ -293,15 +292,7 @@ func updateTaskStateSingle(id int, newState task.State) error {
 
 	oldState := t.State
 	if oldState != newState {
-		t.State = newState
-		t.UpdatedAt = time.Now()
-		if newState == task.StateBegun {
-			now := time.Now()
-			t.StartedAt = &now
-		} else if newState == task.StateDone {
-			now := time.Now()
-			t.CompletedAt = &now
-		}
+		changeState(t, newState)
 		addLog(t, fmt.Sprintf("State changed from %s to %s", oldState, newState))
 	}
 

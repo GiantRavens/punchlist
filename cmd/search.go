@@ -20,7 +20,7 @@ func newSearchCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			stateCatalog, err := loadStateCatalog()
 			if err != nil {
-				fmt.Printf("Error loading state config: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error loading state config: %v\n", err)
 				return
 			}
 			// read filter and sort flags
@@ -33,13 +33,13 @@ func newSearchCmd() *cobra.Command {
 
 			targetPath, remainingArgs := extractTargetPath(args)
 			if len(remainingArgs) == 0 {
-				fmt.Println("Error: search query required")
+				fmt.Fprintln(os.Stderr, "Error: search query required")
 				return
 			}
 			query := strings.Join(remainingArgs, " ")
 			query = strings.TrimSpace(query)
 			if query == "" {
-				fmt.Println("Error: search query required")
+				fmt.Fprintln(os.Stderr, "Error: search query required")
 				return
 			}
 			queryLower := strings.ToLower(query)
@@ -52,7 +52,7 @@ func newSearchCmd() *cobra.Command {
 					if printNotPunchlistError(err) {
 						return
 					}
-					fmt.Printf("Error locating tasks: %v\n", err)
+					fmt.Fprintf(os.Stderr, "Error locating tasks: %v\n", err)
 					return
 				}
 				tasksPath = filepath.Join(root, "tasks")
@@ -62,7 +62,7 @@ func newSearchCmd() *cobra.Command {
 					if printNotPunchlistError(err) {
 						return
 					}
-					fmt.Printf("Error locating tasks: %v\n", err)
+					fmt.Fprintf(os.Stderr, "Error locating tasks: %v\n", err)
 					return
 				}
 			}
@@ -76,7 +76,7 @@ func newSearchCmd() *cobra.Command {
 			if stateToken == "" {
 				stateToken = lsStatus
 			} else if lsStatus != "" && !strings.EqualFold(lsState, lsStatus) {
-				fmt.Println("Error: state provided twice (use either --state or --status)")
+				fmt.Fprintln(os.Stderr, "Error: state provided twice (use either --state or --status)")
 				return
 			}
 			filterToken := strings.TrimSpace(stateToken)
@@ -91,7 +91,7 @@ func newSearchCmd() *cobra.Command {
 				if !d.IsDir() && strings.HasSuffix(d.Name(), ".md") {
 					t, err := task.Parse(path)
 					if err != nil {
-						fmt.Printf("Error parsing task file %s: %v\n", path, err)
+						fmt.Fprintf(os.Stderr, "Error parsing task file %s: %v\n", path, err)
 						return nil // continue walking
 					}
 
@@ -122,7 +122,7 @@ func newSearchCmd() *cobra.Command {
 
 					content, err := os.ReadFile(path)
 					if err != nil {
-						fmt.Printf("Error reading task file %s: %v\n", path, err)
+						fmt.Fprintf(os.Stderr, "Error reading task file %s: %v\n", path, err)
 						return nil
 					}
 					frontmatter, body := splitFrontmatterAndBody(string(content))
@@ -139,7 +139,7 @@ func newSearchCmd() *cobra.Command {
 			})
 
 			if err != nil {
-				fmt.Printf("Error searching tasks: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error searching tasks: %v\n", err)
 				return
 			}
 

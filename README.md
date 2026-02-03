@@ -44,7 +44,7 @@ pin ls done
 pin ls todo --tag launch
 pin ls --state todo
 pin ls --status todo
-pin search exagrid
+pin search BLARG 
 pin show 12
 ```
 
@@ -271,10 +271,12 @@ Workflow tips:
 
 ## Development
 
-run tests:
+Build and test:
 
 ```bash
-go test ./...
+make check    # runs go test ./... && go vet ./...
+make build    # builds ./pin with version from VERSION file
+make install  # go install with version ldflags
 ```
 
 For command grammar details, see `docs/grammar.md`.

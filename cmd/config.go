@@ -21,13 +21,13 @@ func newConfigCmd() *cobra.Command {
 				if printNotPunchlistError(err) {
 					return
 				}
-				fmt.Printf("Error loading config: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 				return
 			}
 
 			configPath := filepath.Join(root, config.PunchlistDir, "config.yaml")
 			if _, err := os.Stat(configPath); err != nil {
-				fmt.Printf("Error locating config: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error locating config: %v\n", err)
 				return
 			}
 
@@ -45,7 +45,7 @@ func newConfigCmd() *cobra.Command {
 			cmdExec.Stdout = os.Stdout
 			cmdExec.Stderr = os.Stderr
 			if err := cmdExec.Run(); err != nil {
-				fmt.Printf("Error launching editor: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error launching editor: %v\n", err)
 				return
 			}
 		},
@@ -64,7 +64,7 @@ func newConfigMigrateCmd() *cobra.Command {
 				if printNotPunchlistError(err) {
 					return
 				}
-				fmt.Printf("Error loading config: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 				return
 			}
 
@@ -79,7 +79,7 @@ func newConfigMigrateCmd() *cobra.Command {
 			}
 
 			if _, err := config.BuildStateCatalog(cfg); err != nil {
-				fmt.Printf("Config invalid: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Config invalid: %v\n", err)
 				return
 			}
 
@@ -88,7 +88,7 @@ func newConfigMigrateCmd() *cobra.Command {
 				return
 			}
 			if err := config.SaveConfig(cfg); err != nil {
-				fmt.Printf("Error saving config: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
 				return
 			}
 			fmt.Println("Config updated.")

@@ -61,9 +61,6 @@ func createTaskFromArgsInDir(args []string) error {
 	if canonical, ok := stateCatalog.Resolve(args[0]); ok {
 		state = task.State(canonical)
 		args = args[1:]
-	} else if parsed, ok := task.ParseState(args[0]); ok {
-		state = parsed
-		args = args[1:]
 	} else if isUpperStateToken(args[0]) {
 		state = task.State(stateCatalog.Canonicalize(args[0]))
 		args = args[1:]
@@ -163,6 +160,9 @@ func parseCreateModifiers(args []string) (createOptions, error) {
 			priority, err := strconv.Atoi(value)
 			if err != nil {
 				return opts, fmt.Errorf("invalid priority: %s", value)
+			}
+			if priority < 0 || priority > 10 {
+				return opts, fmt.Errorf("priority must be between 0 and 10, got %d", priority)
 			}
 			opts.priority = priority
 		case "due":
@@ -424,11 +424,12 @@ func dateAtNoon(now time.Time, addDays int) time.Time {
 	return time.Date(target.Year(), target.Month(), target.Day(), 12, 0, 0, 0, target.Location())
 }
 
+var slugifyRegex = regexp.MustCompile("[^a-z0-9]+")
+
 // generate a filename-safe slug
 func slugify(s string) string {
 	s = strings.ToLower(s)
-	re := regexp.MustCompile("[^a-z0-9]+")
-	s = re.ReplaceAllString(s, "-")
+	s = slugifyRegex.ReplaceAllString(s, "-")
 	s = strings.Trim(s, "-")
 	return s
 }

@@ -21,7 +21,7 @@ func newEditCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
-				fmt.Printf("Invalid task ID: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Invalid task ID: %v\n", err)
 				return
 			}
 
@@ -30,7 +30,7 @@ func newEditCmd() *cobra.Command {
 				if printNotPunchlistError(err) {
 					return
 				}
-				fmt.Printf("Error finding task: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error finding task: %v\n", err)
 				return
 			}
 
@@ -48,7 +48,7 @@ func newEditCmd() *cobra.Command {
 			cmdExec.Stdout = os.Stdout
 			cmdExec.Stderr = os.Stderr
 			if err := cmdExec.Run(); err != nil {
-				fmt.Printf("Error launching editor: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error launching editor: %v\n", err)
 				return
 			}
 		},

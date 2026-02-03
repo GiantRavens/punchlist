@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"punchlist/task"
 	"strconv"
@@ -21,7 +22,7 @@ func newShowCmd() *cobra.Command {
 			// parse id and load task
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
-				fmt.Printf("Invalid task ID: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Invalid task ID: %v\n", err)
 				return
 			}
 
@@ -30,13 +31,13 @@ func newShowCmd() *cobra.Command {
 				if printNotPunchlistError(err) {
 					return
 				}
-				fmt.Printf("Error finding task: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error finding task: %v\n", err)
 				return
 			}
 
 			t, err := task.Parse(taskPath)
 			if err != nil {
-				fmt.Printf("Error parsing task: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error parsing task: %v\n", err)
 				return
 			}
 

@@ -26,7 +26,7 @@ func newLsCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			stateCatalog, err := loadStateCatalog()
 			if err != nil {
-				fmt.Printf("Error loading state config: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error loading state config: %v\n", err)
 				return
 			}
 			// read filter and sort flags
@@ -47,7 +47,7 @@ func newLsCmd() *cobra.Command {
 					if printNotPunchlistError(err) {
 						return
 					}
-					fmt.Printf("Error locating tasks: %v\n", err)
+					fmt.Fprintf(os.Stderr, "Error locating tasks: %v\n", err)
 					return
 				}
 				tasksPath = filepath.Join(root, "tasks")
@@ -57,7 +57,7 @@ func newLsCmd() *cobra.Command {
 					if printNotPunchlistError(err) {
 						return
 					}
-					fmt.Printf("Error locating tasks: %v\n", err)
+					fmt.Fprintf(os.Stderr, "Error locating tasks: %v\n", err)
 					return
 				}
 			}
@@ -71,12 +71,12 @@ func newLsCmd() *cobra.Command {
 			if stateToken == "" {
 				stateToken = lsStatus
 			} else if lsStatus != "" && !strings.EqualFold(lsState, lsStatus) {
-				fmt.Println("Error: state provided twice (use either --state or --status)")
+				fmt.Fprintln(os.Stderr, "Error: state provided twice (use either --state or --status)")
 				return
 			}
 			if stateToken != "" && len(remainingArgs) > 0 {
 				if !strings.EqualFold(stateToken, remainingArgs[0]) {
-					fmt.Println("Error: state provided twice (use either --state or positional state)")
+					fmt.Fprintln(os.Stderr, "Error: state provided twice (use either --state or positional state)")
 					return
 				}
 			}
@@ -95,7 +95,7 @@ func newLsCmd() *cobra.Command {
 				if !d.IsDir() && strings.HasSuffix(d.Name(), ".md") {
 					t, err := task.Parse(path)
 					if err != nil {
-						fmt.Printf("Error parsing task file %s: %v\n", path, err)
+						fmt.Fprintf(os.Stderr, "Error parsing task file %s: %v\n", path, err)
 						return nil // continue walking
 					}
 
@@ -130,7 +130,7 @@ func newLsCmd() *cobra.Command {
 			})
 
 			if err != nil {
-				fmt.Printf("Error listing tasks: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Error listing tasks: %v\n", err)
 				return
 			}
 			if len(tasks) == 0 {

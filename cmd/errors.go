@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"punchlist/config"
 )
@@ -14,7 +15,7 @@ func printNotPunchlistError(err error) bool {
 		return false
 	}
 	if errors.Is(err, config.ErrPunchlistNotFound) {
-		fmt.Println(notPunchlistMessage)
+		fmt.Fprintln(os.Stderr, notPunchlistMessage)
 		return true
 	}
 	return false

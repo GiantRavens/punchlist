@@ -45,7 +45,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o dist/pin-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} .
+          VERSION=$(cat VERSION)
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -ldflags "-X punchlist/cmd.Version=${VERSION}" -o dist/pin-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} .
       - name: release assets
         uses: softprops/action-gh-release@v2
         with:

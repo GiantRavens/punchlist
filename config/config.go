@@ -135,5 +135,9 @@ func SaveConfig(cfg *Config) error {
 		return fmt.Errorf("could not marshal config: %w", err)
 	}
 
-	return os.WriteFile(configPath, data, 0644)
+	tmpPath := configPath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return fmt.Errorf("could not write config temp file: %w", err)
+	}
+	return os.Rename(tmpPath, configPath)
 }
