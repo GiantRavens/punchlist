@@ -79,18 +79,22 @@ pin, punchlist
 
 | Command | Description |
 | --- | --- |
+| `acceptance` | List acceptance criteria for a task |
 | `block` | Change a task's status to BLOCKED |
 | `browse` | Browse tasks in an interactive viewer |
+| `check` | Toggle an acceptance criterion checkbox |
 | `compact` | Compact task IDs into a contiguous sequence |
 | `config` | Open the current configuration in your editor |
 | `confirm` | Mark a task as needing confirmation |
 | `del` | Move a task to the trash |
+| `deps` | Show dependencies for a task |
 | `done` | Complete a task |
 | `due` | Set or change a task due date |
 | `edit` | Open a task in your editor |
 | `help` | Help about any command |
 | `init` | Initialize a new punchlist project |
 | `ls` | List tasks |
+| `meta` | View or set metadata on a task |
 | `notdo` | Mark a task as not to do |
 | `note` | Add a note to a task |
 | `search` | Search tasks by text |

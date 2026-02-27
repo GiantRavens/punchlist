@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.0
+- JSON output (`--json`) for `pin ls`, `pin show`, and `pin search` — machine-readable task data for AI agents and scripts.
+- `pin meta <id> [key=value ...]` — freeform metadata for provenance: source, from, to, meeting context, etc.
+- `pin acceptance <id>` / `pin checks <id>` — list `## Acceptance` checkboxes from a task body.
+- `pin check <id> <index>` — toggle an acceptance criterion checkbox; state persists to disk.
+- `pin deps <id>` — show forward dependencies and reverse dependents for a task.
+- `pin ls --ready` — filter to tasks whose dependencies are all DONE (for agent task planning).
+- `depends:` creation modifier — `pin "Deploy" depends:1,2 pri:1` wires up task dependencies at creation time.
+- `DependsOn` and `Meta` fields added to task YAML frontmatter (both `omitempty`, zero user impact for existing tasks).
+- Acceptance criteria appear in `pin show --json` output as a structured array.
+
 ## 1.0.0
 - Atomic file writes for tasks and config (write-to-temp-then-rename).
 - All error output routed to stderr; stdout reserved for data.

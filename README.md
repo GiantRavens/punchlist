@@ -9,227 +9,186 @@
 
 # punchlist
 
-Punchlist is an open, transparent, markdown-native, AI-friendly task ticket system. Every TODO/task is a markdown file, easily parsed and edited with tools like nvim or Obsidian, or wired into your coding assistant workflow.
+A lightweight, local, markdown-native task and ticket system for humans and AI agents — no database, no app, no account required.
 
-## Make any folder a scoped task system
+## Why punchlist?
 
-From within any folder, such as 'work' or 'home projects' use `pin init` to initialize it as a punchlist project home. 
+Most task tools are apps: databases behind a UI, locked to a service, requiring context-switches away from your work. GitHub Issues are powerful but heavy — and don't travel with your local project. Plain text files are too loose to query or automate.
+
+Punchlist sits in the middle: **every task is a plain markdown file with YAML frontmatter**, committed alongside your code, editable in any text editor, queryable with `--json`, and legible to both humans and AI agents without translation.
+
+- **No database.** Tasks are `.md` files in a `tasks/` folder.
+- **No app.** Open any task in nvim, VS Code, Obsidian, or anything else.
+- **No lock-in.** Plain markdown and YAML. If you stop using `pin`, your files are still there.
+- **Travels with your project.** Commit your tasks alongside your code.
+- **Works with your AI assistant.** JSON output, structured metadata, dependency tracking, and acceptance criteria make punchlist a first-class context layer for AI agents and coding tools.
+
+---
+
+## Quick start
 
 ```bash
-pin init
+pin init                              # initialize any folder as a punchlist project
+pin "write release plan" pri:1        # create a task (defaults to TODO)
+pin ls                                # list all tasks
+pin browse                            # interactive TUI browser
 ```
 
-`pin init` simply builds a .punchlist directory with a basic config.yaml file, adds a tasks/ folder that holds markdown files, one markdown file per task. 
+---
 
-Each markdown task has YAML front-matter, and is easily editable and configurable in any editor, or modified with punchlist's 'pin' command.
+## Creating tasks
 
-Punchlist's 'pin' command grammar is meant to be natural and tolerant.
-
-Examples of creating tasks:
+The `pin` command grammar is natural and tolerant. State is optional; if omitted, the task defaults to TODO.
 
 ```bash
+pin "write outline"
+pin todo "draft messaging brief" pri:1
+pin todo "send pr draft" by:2026-01-15
+pin todo "ship notes" by:tomorrow
+pin todo "review plan" by:friday
 pin todo "write release plan" pri:1 by:2026-01-09 tags:{launch,pr}
-pin todo ../homeprojects "draft release email"
+pin todo "Deploy to prod" depends:3,4 pri:1
 pin done "shipped quick fix for onboarding typo"
-pin --version
+pin begun "triage the backlog"
+pin block "waiting on vendor response"
+pin todo ../work "queue follow-up"    # create in another project folder
 ```
 
-Listing and inspecting tasks:
+Each task gets a numbered markdown file (`tasks/001-write-outline.md`) with YAML frontmatter and a body you can freely edit.
+
+**Scope:** Each initialized folder has its own independent task list. Use an explicit path to target a different project:
 
 ```bash
-pin ls
-pin ls ../homeprojects
-pin ls todo
-pin ls done
-pin ls todo --tag launch
-pin ls --state todo
-pin ls --status todo
-pin search BLARG 
-pin show 12
+pin ls ../work                        # list tasks in another project
+pin todo ../work "queue follow-up"    # create a task in a specific project
 ```
 
-Search scans frontmatter, title, and body/notes (logs excluded) with case-insensitive matching.
+`pin` walks up from the current directory to find the nearest `.punchlist/` folder, so it's usually correct — but worth checking when working across sibling projects.
 
-Browse tasks interactively:
+---
+
+## Listing, searching, and inspecting tasks
+
+```bash
+pin ls                        # all tasks, grouped by state
+pin ls todo                   # filter by state
+pin ls todo --tag launch      # filter by tag
+pin ls --order id             # sort by id instead of state
+pin search "release"          # full-text search across title, body, frontmatter
+pin show 12                   # full task detail
+```
+
+### Machine-readable JSON output
+
+All read commands support `--json` for use in scripts and AI pipelines:
+
+```bash
+pin ls --json
+pin ls todo --json
+pin show --json 12
+pin search --json "keyword"
+pin ls --ready --json | jq '.[0].id'    # next actionable task
+```
+
+`pin ls --json` returns a task array without body. `pin show --json` includes the full body, metadata, and acceptance criteria.
+
+---
+
+## Task states
+
+States are fully configurable. Default states from `pin init`:
+
+| State | Aliases | Browse hotkey |
+|---|---|---|
+| `TODO` | todo | `t` |
+| `BEGUN` | begun, started, inprogress | `b` |
+| `FOLLOWUP` | followup, confirm | `f` |
+| `DEFER` | defer | `l` |
+| `NOTDO` | notdo | `x` |
+| `DONE` | done, complete, completed | `d` |
+
+Change state with any state token:
+
+```bash
+pin start 12
+pin done 12
+pin block 12
+pin todo 12
+pin REDLIGHT 12           # any custom state token works
+pin begun "triage the backlog"    # state + new task title creates a task in that state
+```
+
+Add or rename states by editing `states:` in `.punchlist/config.yaml`. All commands respect the configured ordering.
+
+---
+
+## Browse
 
 ```bash
 pin browse
 pin browse todo
 ```
 
-`pin browse` opens a keyboard-driven viewer with the current task, plus quick actions for adding notes
-and updating state (configurable hotkeys; n for notes, e to edit, q to quit, arrows/J/K to move, 1-9/0 for priority).
+`pin browse` opens a keyboard-driven TUI viewer. Navigate with arrows or `J`/`K`, update state with hotkeys, add notes with `n`, open in your editor with `e`, set priority with `1–9`/`0`, quit with `q`.
 
-Updating task 'states':
+---
 
-```bash
-pin start 12
-pin todo 12
-pin done 12
-pin block 12
-pin confirm 12
-pin followup 12
-pin notdo 12
-pin begun "triage the backlog"
-pin block "waiting on vendor response"
-```
-
-State names, aliases, and browse hotkeys are configured in `.punchlist/config.yaml` (single-word tokens).
-Any state token can be used to update existing tasks: `pin REDLIGHT 12`.
-
-Edit config quickly:
+## Task details
 
 ```bash
-pin config
-pin config migrate
-```
-
-Default states (from `pin init`) are:
-
-- `TODO` (aliases: todo, hotkey: t)
-- `BEGUN` (aliases: begun, started, inprogress, hotkey: b)
-- `FOLLOWUP` (aliases: followup, confirm, hotkey: f)
-- `DEFER` (aliases: defer, hotkey: l)
-- `NOTDO` (aliases: notdo, hotkey: x)
-- `DONE` (aliases: done, complete, completed, hotkey: d)
-
-You can add or rename states by editing the `states:` list in `.punchlist/config.yaml`. Browse and list commands will respect the configured ordering and append any unknown states at the end.
-
-Add notes to existing tasks:
-
-```bash
-pin note 12 "call vendor and confirm timeline"
-```
-
-Tag existing tasks:
-
-```bash
-pin tag 12 15 "today, blocked"
-```
-
-Open a task in your editor:
-
-```bash
-pin edit 12
-```
-
-Add a due date:
-
-```bash
+pin note 12 "call vendor and confirm timeline"    # append a note
+pin tag 12 15 "today, blocked"                    # add tags to one or more tasks
+pin due 12 "next tuesday"                         # set or change due date
 pin due 12 2026-01-15
-pin due 12 "next tuesday"
+pin edit 12                                       # open in $EDITOR
 ```
 
-Delete a Task (moves to `.trash/`):
-
-```bash
-pin del 12
-```
-
-Compact task IDs down (renumber all tasks to avoid large id gaps):
-
-```bash
-pin compact
-```
-
-## Select multiple tasks:
-
-You can pass multiple ids and ranges:
+### Multiple task selection
 
 ```bash
 pin done 2 3 6-9
-pin del "[2-3, 7]"
+pin del "[2-3, 7]"     # quote brackets in zsh to avoid glob expansion
 ```
 
-note: zsh treats `[]` as glob patterns, so quote bracket selectors or use `noglob`.
+---
 
-## Automatically showing task counts when entering a punchlist capable folder:
+## AI agent workflow
 
-If you like, you can be alerted when you move into a directory that is punchlist enabled - here's a simple starter example that gives an old school mail alert on entering a punchlist-enabled directory:
+Punchlist is designed as a first-class AI agent substrate: structured enough to be queried and automated, simple enough to edit by hand.
+
+### Task metadata — provenance and context
+
+Capture where a task came from, who assigned it, and to whom:
 
 ```bash
-# punchlist notifier
-# find nearest parent with .punchlist (project root)
-_punchlist_root() {
-  local d="$PWD"
-  while [[ "$d" != "/" ]]; do
-    [[ -d "$d/.punchlist" ]] && { print -r -- "$d"; return 0 }
-    d="${d:h}"
-  done
-  return 1
-}
-
-# count markdown tasks (prefer ./tasks, fallback to .punchlist/tasks)
-_punchlist_task_count() {
-  local root tasks_dir
-  root="$(_punchlist_root)" || return 1
-
-  if [[ -d "$root/tasks" ]]; then
-    tasks_dir="$root/tasks"
-  elif [[ -d "$root/.punchlist/tasks" ]]; then
-    tasks_dir="$root/.punchlist/tasks"
-  else
-    return 1
-  fi
-
-  local -a files
-  files=("$tasks_dir"/*.md(N))   # nullglob
-  print -r -- "${#files[@]}"
-}
-
-# last-seen task count
-typeset -g _PUNCHLIST_LAST_COUNT=""
-
-# print notice before prompt (mail-style)
-_punchlist_maybe_notice() {
-  [[ -o interactive ]] || return 0
-
-  local count
-  count="$(_punchlist_task_count)" || { _PUNCHLIST_LAST_COUNT=""; return 0 }
-
-  if [[ "$count" != "$_PUNCHLIST_LAST_COUNT" ]]; then
-    local plural=""
-    (( count != 1 )) && plural="s"
-    print -r -- "${count} task${plural}. Use \`pin ls\` to review."
-    _PUNCHLIST_LAST_COUNT="$count"
-  fi
-}
+pin meta 1 source=standup-2026-02-27 from=alice to=bob
+pin meta 1                      # display all metadata
+pin meta 1 from=                # delete a key (empty value)
+pin show --json 1 | jq .meta   # read in JSON
 ```
 
-## Data Layout
+Metadata lives in `meta:` YAML frontmatter — invisible to human users who don't need it, fully accessible to agents that do.
 
-- tasks live in `tasks/` as markdown files with yaml frontmatter.
-- config lives in `.punchlist/config.yaml`.
-- deleted tasks move to `.trash/`.
-- compacted tasks have their filenames renumbered, but a log entry is added noting the original and new id's
+### Acceptance criteria
 
-## Config
+Structured checkboxes from a `## Acceptance` section in the task body:
 
-`.punchlist/config.yaml` supports:
+```bash
+pin acceptance 1       # list criteria with indices (alias: pin checks)
+pin check 1 2          # toggle item 2 checked/unchecked
+pin show --json 1 | jq .acceptance    # structured array: text, checked, index
+```
 
-- `next_id`: next task id
-- `id_width`: zero padding width for filenames (default 3)
-- `ls_state_order`: custom state ordering for `pin ls`
-- `states`: list of state definitions with `name`, `aliases`, and `tui_hotkey`
-- `edit_start_insert`: when true, add `+startinsert` for vim/nvim (default true)
-- `edit_goyo`: when true, add `+Goyo` for vim/nvim (default false)
-- `browse_margin`: columns of left/right margin in `pin browse` (default 12)
-- `title_max_len`: max stored title length before truncation (default 80)
-- `ls_title_max_len`: max title length shown in `pin ls` (default 80)
+### Dependencies and planning
 
-State config notes:
+```bash
+pin "Deploy" depends:1,2 pri:1         # create task with dependencies
+pin deps 5                              # forward deps + reverse lookup
+pin ls --ready                          # only tasks whose deps are all DONE
+pin ls --ready --json | jq '.[0].id'   # pick next actionable task
+```
 
-- `name` and each alias must be single-word tokens (no spaces).
-- `tui_hotkey` must be a single character and cannot conflict with reserved keys (`n`, `q`, `j`, `k`, `J`, `K`, space, `e`, `0-9`).
-- `pin config migrate` backfills `states` and `ls_state_order` into older configs without overwriting your existing values.
-
-## Using punchlist with AI coding assistants
-
-Punchlist works best with assistants when tasks are small, explicit, and easy to verify. Use tickets as the source of truth, and have the assistant update task state as work progresses.
-
-If you use agent instruction files, see `AGENTS.md` at the repo root for machine-facing guidance on how assistants should operate in this codebase.
-
-Suggested ticket template (markdown file content):
+### Suggested task template
 
 ```markdown
 ---
@@ -237,6 +196,11 @@ state: todo
 pri: 2
 by: 2026-02-01
 tags: [ai, assistant]
+depends_on: [3, 4]
+meta:
+  source: standup-2026-02-27
+  from: alice
+  to: bob
 ---
 
 # <short, testable outcome>
@@ -246,7 +210,7 @@ tags: [ai, assistant]
 
 ## Acceptance
 - [ ] <verifiable result>
-- [ ] <test or command to run, if any>
+- [ ] <test or command to run>
 
 ## Context
 - Files: <paths>
@@ -257,29 +221,114 @@ tags: [ai, assistant]
 - Assumptions: <if any>
 ```
 
-Workflow tips:
+### Workflow tips
 
-- Keep tasks tiny and specific; one outcome per ticket.
-- Include concrete acceptance checks (files changed, behavior, tests).
-- Add file paths and constraints so the assistant can act without guessing.
-- Track status with `pin start`, `pin block`, `pin done`, and add `pin note` updates as you go.
+- Keep tasks small and specific — one outcome per ticket.
+- Include concrete acceptance checks; use `pin check` to toggle them as you go.
+- Use `pin meta` to capture provenance: source meeting, who assigned it, and to whom.
+- Use `depends:` and `pin ls --ready` so agents always pick the right next task.
+- Treat `pin note` as a running log — decisions, commands run, blockers hit.
+- See `AGENTS.md` for machine-facing guidance and `docs/assistant-brief.md` for an extended agent workflow guide.
 
-## Docs
+---
 
-- `docs/assistant-brief.md` for assistant workflows and best practices.
-- `docs/help-docs-build-generated.md` for offline `pin --help` output (auto-generated during build).
+## Configuration
+
+`.punchlist/config.yaml` supports:
+
+- `states`: list of state definitions with `name`, `aliases`, and `tui_hotkey`
+- `ls_state_order`: custom state ordering for `pin ls`
+- `next_id`: next task id (auto-managed)
+- `id_width`: zero padding width for filenames (default 3)
+- `title_max_len`: max stored title length before truncation (default 80)
+- `ls_title_max_len`: max title length shown in `pin ls` (default 80)
+- `edit_start_insert`: add `+startinsert` for vim/nvim (default true)
+- `edit_goyo`: add `+Goyo` for vim/nvim (default false)
+- `browse_margin`: columns of left/right margin in `pin browse` (default 12)
+
+```bash
+pin config          # open config in $EDITOR
+pin config migrate  # backfill new config fields without overwriting yours
+```
+
+State config rules: `name` and aliases must be single-word tokens; `tui_hotkey` must be a single character and cannot conflict with reserved keys (`n`, `q`, `j`, `k`, `J`, `K`, space, `e`, `0–9`).
+
+---
+
+## Data layout
+
+```
+your-project/
+  .punchlist/
+    config.yaml       # project config
+  tasks/
+    001-write-outline.md
+    002-review-plan.md
+    ...
+  .trash/             # deleted tasks land here (not permanently removed)
+```
+
+Tasks are plain markdown files with YAML frontmatter. Config is plain YAML. Nothing is hidden, encoded, or proprietary.
+
+---
+
+## Shell integration (optional)
+
+Get notified when you `cd` into a punchlist-enabled folder:
+
+```bash
+# find nearest parent with .punchlist
+_punchlist_root() {
+  local d="$PWD"
+  while [[ "$d" != "/" ]]; do
+    [[ -d "$d/.punchlist" ]] && { print -r -- "$d"; return 0 }
+    d="${d:h}"
+  done
+  return 1
+}
+
+_punchlist_task_count() {
+  local root tasks_dir
+  root="$(_punchlist_root)" || return 1
+  if [[ -d "$root/tasks" ]]; then
+    tasks_dir="$root/tasks"
+  elif [[ -d "$root/.punchlist/tasks" ]]; then
+    tasks_dir="$root/.punchlist/tasks"
+  else
+    return 1
+  fi
+  local -a files
+  files=("$tasks_dir"/*.md(N))
+  print -r -- "${#files[@]}"
+}
+
+typeset -g _PUNCHLIST_LAST_COUNT=""
+_punchlist_maybe_notice() {
+  [[ -o interactive ]] || return 0
+  local count
+  count="$(_punchlist_task_count)" || { _PUNCHLIST_LAST_COUNT=""; return 0 }
+  if [[ "$count" != "$_PUNCHLIST_LAST_COUNT" ]]; then
+    local plural=""
+    (( count != 1 )) && plural="s"
+    print -r -- "${count} task${plural}. Use \`pin ls\` to review."
+    _PUNCHLIST_LAST_COUNT="$count"
+  fi
+}
+```
+
+---
 
 ## Development
 
-Build and test:
-
 ```bash
-make check    # runs go test ./... && go vet ./...
+make check    # go test ./... && go vet ./...
 make build    # builds ./pin with version from VERSION file
 make install  # go install with version ldflags
 ```
 
 For command grammar details, see `docs/grammar.md`.
+
+---
 
 ## Project
 
