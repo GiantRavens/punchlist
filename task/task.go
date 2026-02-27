@@ -50,19 +50,21 @@ func ParseState(input string) (State, bool) {
 
 // task is the canonical in-memory representation
 type Task struct {
-	ID           int        `yaml:"id"`
-	Title        string     `yaml:"title"`
-	State        State      `yaml:"state"`
-	Priority     int        `yaml:"priority,omitempty"`
-	Due          *time.Time `yaml:"due,omitempty"`
-	Tags         []string   `yaml:"tags,omitempty"`
-	CreatedAt    time.Time  `yaml:"created_at"`
-	UpdatedAt    time.Time  `yaml:"updated_at"`
-	StartedAt    *time.Time `yaml:"started_at,omitempty"`
-	CompletedAt  *time.Time `yaml:"completed_at,omitempty"`
-	ExternalRefs []string   `yaml:"external_refs,omitempty"`
-	Path         string     `yaml:"-"`
-	Body         string     `yaml:"-"`
+	ID           int                    `yaml:"id" json:"id"`
+	Title        string                 `yaml:"title" json:"title"`
+	State        State                  `yaml:"state" json:"state"`
+	Priority     int                    `yaml:"priority,omitempty" json:"priority,omitempty"`
+	Due          *time.Time             `yaml:"due,omitempty" json:"due,omitempty"`
+	Tags         []string               `yaml:"tags,omitempty" json:"tags,omitempty"`
+	CreatedAt    time.Time              `yaml:"created_at" json:"created_at"`
+	UpdatedAt    time.Time              `yaml:"updated_at" json:"updated_at"`
+	StartedAt    *time.Time             `yaml:"started_at,omitempty" json:"started_at,omitempty"`
+	CompletedAt  *time.Time             `yaml:"completed_at,omitempty" json:"completed_at,omitempty"`
+	ExternalRefs []string               `yaml:"external_refs,omitempty" json:"external_refs,omitempty"`
+	DependsOn    []int                  `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
+	Meta         map[string]interface{} `yaml:"meta,omitempty" json:"meta,omitempty"`
+	Path         string                 `yaml:"-" json:"path"`
+	Body         string                 `yaml:"-" json:"body,omitempty"`
 }
 
 // frontmatterSeparator defines yaml delimiters
@@ -192,6 +194,8 @@ func parseFrontmatterLenient(frontmatter string) (*Task, error) {
 			}
 		case "external_refs":
 			task.ExternalRefs = parseInlineList(value)
+		case "depends_on":
+			task.DependsOn = parseInlineIntList(value)
 		}
 	}
 
@@ -243,6 +247,35 @@ func parseInlineList(value string) []string {
 	}
 
 	return []string{clean}
+}
+
+func parseInlineIntList(value string) []int {
+	clean := strings.TrimSpace(value)
+	if clean == "" || clean == "[]" {
+		return nil
+	}
+	if strings.HasPrefix(clean, "[") && strings.HasSuffix(clean, "]") {
+		clean = strings.TrimSpace(clean[1 : len(clean)-1])
+	}
+	if clean == "" {
+		return nil
+	}
+	parts := strings.Split(clean, ",")
+	out := make([]int, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		id, err := strconv.Atoi(part)
+		if err == nil {
+			out = append(out, id)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func parseTimestamp(value string) (time.Time, bool) {

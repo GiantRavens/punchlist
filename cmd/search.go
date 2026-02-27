@@ -30,6 +30,7 @@ func newSearchCmd() *cobra.Command {
 			lsReverse, _ := cmd.Flags().GetBool("reverse")
 			lsState, _ := cmd.Flags().GetString("state")
 			lsStatus, _ := cmd.Flags().GetString("status")
+			jsonOutput, _ := cmd.Flags().GetBool("json")
 
 			targetPath, remainingArgs := extractTargetPath(args)
 			if len(remainingArgs) == 0 {
@@ -151,6 +152,13 @@ func newSearchCmd() *cobra.Command {
 			// order results
 			sortTasks(tasks, lsOrder, lsReverse, stateCatalog)
 
+			if jsonOutput {
+				if err := marshalTaskList(tasks); err != nil {
+					fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+				}
+				return
+			}
+
 			// print aligned ids
 			idWidth := maxIDWidth(tasks)
 			configWidth := loadIDWidth()
@@ -193,6 +201,7 @@ func newSearchCmd() *cobra.Command {
 	cmd.Flags().String("status", "", "Alias for --state")
 	cmd.Flags().String("order", "state", "Order by state or id")
 	cmd.Flags().Bool("reverse", false, "Reverse sort order")
+	cmd.Flags().Bool("json", false, "Output as JSON")
 
 	return cmd
 }

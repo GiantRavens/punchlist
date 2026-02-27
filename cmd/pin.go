@@ -18,6 +18,7 @@ type createOptions struct {
 	due      *time.Time
 	tags     []string
 	state    string
+	depends  []int
 }
 
 // create a task from free-form args
@@ -112,6 +113,7 @@ func createTaskFromArgsInDir(args []string) error {
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 		Due:       opts.due,
+		DependsOn: opts.depends,
 	}
 	// use a default h1 body
 	newTask.Body = fmt.Sprintf("# %s\n", fullTitle)
@@ -175,6 +177,8 @@ func parseCreateModifiers(args []string) (createOptions, error) {
 			opts.tags = parseTags(value)
 		case "state":
 			opts.state = value
+		case "depends":
+			opts.depends = parseDependsList(value)
 		default:
 			return opts, fmt.Errorf("unknown modifier: %s", key)
 		}
@@ -270,6 +274,8 @@ func normalizeModifierKey(key string) (string, bool) {
 		return "tags", true
 	case "state":
 		return "state", true
+	case "depends", "deps", "depends_on":
+		return "depends", true
 	default:
 		return "", false
 	}
@@ -422,6 +428,29 @@ func nextWeekdayAtNoon(now time.Time, weekday time.Weekday, forceNextWeek bool) 
 func dateAtNoon(now time.Time, addDays int) time.Time {
 	target := now.AddDate(0, 0, addDays)
 	return time.Date(target.Year(), target.Month(), target.Day(), 12, 0, 0, 0, target.Location())
+}
+
+// parse comma-separated int lists like "1,2,3" or "{1,2,3}"
+func parseDependsList(value string) []int {
+	trimmed := strings.TrimSpace(value)
+	trimmed = strings.TrimPrefix(trimmed, "{")
+	trimmed = strings.TrimSuffix(trimmed, "}")
+	if trimmed == "" {
+		return nil
+	}
+	parts := strings.Split(trimmed, ",")
+	ids := make([]int, 0, len(parts))
+	for _, part := range parts {
+		id, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
 }
 
 var slugifyRegex = regexp.MustCompile("[^a-z0-9]+")

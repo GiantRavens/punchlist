@@ -14,7 +14,7 @@ import (
 
 // create the show command
 func newShowCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "show [id]",
 		Short: "Show a task in detail",
 		Args:  cobra.ExactArgs(1),
@@ -41,6 +41,15 @@ func newShowCmd() *cobra.Command {
 				return
 			}
 
+			jsonOutput, _ := cmd.Flags().GetBool("json")
+			if jsonOutput {
+				acceptance := parseAcceptance(t.Body)
+				if err := marshalTaskShow(t, acceptance); err != nil {
+					fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+				}
+				return
+			}
+
 			// print task details
 			fmt.Printf("ID: %d\n", t.ID)
 			fmt.Printf("Title: %s\n", t.Title)
@@ -53,6 +62,19 @@ func newShowCmd() *cobra.Command {
 			fmt.Printf("Started: %s\n", formatOptionalTime(t.StartedAt))
 			fmt.Printf("Completed: %s\n", formatOptionalTime(t.CompletedAt))
 			fmt.Printf("External refs: %s\n", formatList(t.ExternalRefs))
+			if len(t.DependsOn) > 0 {
+				depStrs := make([]string, len(t.DependsOn))
+				for i, d := range t.DependsOn {
+					depStrs[i] = strconv.Itoa(d)
+				}
+				fmt.Printf("Depends on: %s\n", strings.Join(depStrs, ", "))
+			}
+			if len(t.Meta) > 0 {
+				fmt.Printf("Meta:\n")
+				for k, v := range t.Meta {
+					fmt.Printf("  %s: %v\n", k, v)
+				}
+			}
 			fmt.Printf("Path: %s\n", filepath.Clean(taskPath))
 
 			if t.Body != "" {
@@ -60,6 +82,10 @@ func newShowCmd() *cobra.Command {
 			}
 		},
 	}
+
+	cmd.Flags().Bool("json", false, "Output as JSON")
+
+	return cmd
 }
 
 // render optional timestamps consistently

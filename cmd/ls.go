@@ -36,6 +36,8 @@ func newLsCmd() *cobra.Command {
 			lsReverse, _ := cmd.Flags().GetBool("reverse")
 			lsState, _ := cmd.Flags().GetString("state")
 			lsStatus, _ := cmd.Flags().GetString("status")
+			jsonOutput, _ := cmd.Flags().GetBool("json")
+			lsReady, _ := cmd.Flags().GetBool("ready")
 
 			targetPath, remainingArgs := extractTargetPath(args)
 
@@ -133,6 +135,19 @@ func newLsCmd() *cobra.Command {
 				fmt.Fprintf(os.Stderr, "Error listing tasks: %v\n", err)
 				return
 			}
+
+			// filter to tasks whose dependencies are all DONE
+			if lsReady {
+				taskMap := buildTaskMap(tasksPath)
+				var ready []*task.Task
+				for _, t := range tasks {
+					if isTaskReady(t, taskMap, stateCatalog) {
+						ready = append(ready, t)
+					}
+				}
+				tasks = ready
+			}
+
 			if len(tasks) == 0 {
 				fmt.Println("No matches found.")
 				return
@@ -140,6 +155,13 @@ func newLsCmd() *cobra.Command {
 
 			// order results
 			sortTasks(tasks, lsOrder, lsReverse, stateCatalog)
+
+			if jsonOutput {
+				if err := marshalTaskList(tasks); err != nil {
+					fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+				}
+				return
+			}
 
 			// print aligned ids
 			idWidth := maxIDWidth(tasks)
@@ -185,6 +207,8 @@ func newLsCmd() *cobra.Command {
 	cmd.Flags().String("status", "", "Alias for --state")
 	cmd.Flags().String("order", "state", "Order by state or id")
 	cmd.Flags().Bool("reverse", false, "Reverse sort order")
+	cmd.Flags().Bool("json", false, "Output as JSON")
+	cmd.Flags().Bool("ready", false, "Show only tasks whose dependencies are all done")
 
 	return cmd
 }
