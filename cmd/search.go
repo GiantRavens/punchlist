@@ -199,7 +199,7 @@ func newSearchCmd() *cobra.Command {
 	cmd.Flags().StringSlice("tag", []string{}, "Filter by tag (can be used multiple times)")
 	cmd.Flags().String("state", "", "Filter by state")
 	cmd.Flags().String("status", "", "Alias for --state")
-	cmd.Flags().String("order", "state", "Order by state or id")
+	cmd.Flags().String("order", "state", "Order by state, id, priority, or date")
 	cmd.Flags().Bool("reverse", false, "Reverse sort order")
 	cmd.Flags().Bool("json", false, "Output as JSON")
 

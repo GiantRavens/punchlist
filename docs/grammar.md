@@ -58,8 +58,13 @@ flags:
 - `--tag <tag>` (repeatable)
 - `--state <state>`
 - `--status <state>` (alias)
-- `--order state|id`
+- `--order state|id|priority|date`
 - `--reverse`
+- `--by-priority`
+- `--by-date`
+- `--by-date-reverse`
+- `--chunk <n>`
+- `--page <n>` (with `--chunk`)
 
 ## Search Tasks
 
@@ -78,7 +83,7 @@ flags:
 - `--tag <tag>` (repeatable)
 - `--state <state>`
 - `--status <state>` (alias)
-- `--order state|id`
+- `--order state|id|priority|date`
 - `--reverse`
 
 ## Show All Tasks
@@ -103,6 +108,7 @@ You'll be taken to a TUI style interface with these hotkeys (state hotkeys are c
 
 - left/K: previous ticket
 - right/J/space: next ticket
+- state hotkey: apply state and advance to next ticket
 - n: add a note
 - e: edit in your editor
 - 1-9: set priority 1-9

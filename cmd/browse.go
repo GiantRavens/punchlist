@@ -183,6 +183,9 @@ func applyStateChange(m model, newState task.State) (model, tea.Cmd) {
 			m.err = err
 		}
 	}
+	if m.cursor < len(m.tasks)-1 {
+		m.cursor++
+	}
 	return m, nil
 }
 
@@ -402,7 +405,7 @@ func newBrowseCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "browse [state]",
 		Short:             "Browse tasks in an interactive viewer",
-		Long:              "Browse tasks one by one in an interactive full-screen viewer. Keys: \u2190/\u2192 to move, n to add a note, s to set state, e to edit, q to quit.",
+		Long:              "Browse tasks one by one in an interactive full-screen viewer. Keys: \u2190/\u2192 to move, state hotkeys to update state and advance, n to add a note, e to edit, q to quit.",
 		ValidArgsFunction: stateArgCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			stateCatalog, err := loadStateCatalog()

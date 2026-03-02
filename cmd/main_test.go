@@ -9,6 +9,7 @@ import (
 	"punchlist/task"
 	"strings"
 	"testing"
+	"time"
 )
 
 // setupTest creates a temporary directory for a test, changes into it, and returns a teardown function.
@@ -513,6 +514,88 @@ func TestLsPathTarget(t *testing.T) {
 	}
 	if !strings.Contains(output, "Other task") {
 		t.Errorf("ls with path should include task from target dir. Got: %s", output)
+	}
+}
+
+func TestLsChunkAndSortAliases(t *testing.T) {
+	teardown := setupTest(t)
+	defer teardown()
+
+	if _, err := executeCommand("init"); err != nil {
+		t.Fatalf("init command failed: %v", err)
+	}
+	tasksPath, err := tasksDir()
+	if err != nil {
+		t.Fatalf("Failed to resolve tasks dir: %v", err)
+	}
+	if err := os.MkdirAll(tasksPath, 0755); err != nil {
+		t.Fatalf("mkdir tasks dir: %v", err)
+	}
+
+	base := time.Date(2026, 2, 1, 8, 0, 0, 0, time.UTC)
+	task1 := &task.Task{
+		ID:        1,
+		Title:     "P1 newest",
+		State:     task.StateTodo,
+		Priority:  1,
+		CreatedAt: base,
+		UpdatedAt: base.Add(48 * time.Hour),
+	}
+	task2 := &task.Task{
+		ID:        2,
+		Title:     "P5 middle",
+		State:     task.StateTodo,
+		Priority:  5,
+		CreatedAt: base,
+		UpdatedAt: base.Add(24 * time.Hour),
+	}
+	task3 := &task.Task{
+		ID:        3,
+		Title:     "P9 oldest",
+		State:     task.StateTodo,
+		Priority:  9,
+		CreatedAt: base,
+		UpdatedAt: base,
+	}
+	if err := task1.Write(filepath.Join(tasksPath, "001-p1.md")); err != nil {
+		t.Fatalf("write task1: %v", err)
+	}
+	if err := task2.Write(filepath.Join(tasksPath, "002-p5.md")); err != nil {
+		t.Fatalf("write task2: %v", err)
+	}
+	if err := task3.Write(filepath.Join(tasksPath, "003-p9.md")); err != nil {
+		t.Fatalf("write task3: %v", err)
+	}
+
+	output, err := executeCommand("ls", "todo", "--by-priority", "--chunk", "2")
+	if err != nil {
+		t.Fatalf("ls --by-priority --chunk failed: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines from chunked output, got %d: %q", len(lines), output)
+	}
+	if !strings.Contains(lines[0], "P1 newest") {
+		t.Fatalf("expected highest priority first, got: %q", lines[0])
+	}
+	if !strings.Contains(lines[1], "P5 middle") {
+		t.Fatalf("expected second highest priority second, got: %q", lines[1])
+	}
+
+	output, err = executeCommand("ls", "todo", "--by-date-reverse", "--chunk", "1")
+	if err != nil {
+		t.Fatalf("ls --by-date-reverse --chunk failed: %v", err)
+	}
+	if !strings.Contains(output, "P1 newest") {
+		t.Fatalf("expected newest task first in reverse-date order, got: %q", output)
+	}
+
+	output, err = executeCommand("ls", "todo", "--by-date-reverse", "--chunk", "1", "--page", "2")
+	if err != nil {
+		t.Fatalf("ls --by-date-reverse --chunk --page failed: %v", err)
+	}
+	if !strings.Contains(output, "P5 middle") {
+		t.Fatalf("expected second page to include middle task, got: %q", output)
 	}
 }
 

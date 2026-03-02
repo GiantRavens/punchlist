@@ -34,10 +34,52 @@ func newLsCmd() *cobra.Command {
 			lsTags, _ := cmd.Flags().GetStringSlice("tag")
 			lsOrder, _ := cmd.Flags().GetString("order")
 			lsReverse, _ := cmd.Flags().GetBool("reverse")
+			lsByPriority, _ := cmd.Flags().GetBool("by-priority")
+			lsByDate, _ := cmd.Flags().GetBool("by-date")
+			lsByDateReverse, _ := cmd.Flags().GetBool("by-date-reverse")
 			lsState, _ := cmd.Flags().GetString("state")
 			lsStatus, _ := cmd.Flags().GetString("status")
 			jsonOutput, _ := cmd.Flags().GetBool("json")
 			lsReady, _ := cmd.Flags().GetBool("ready")
+			lsChunk, _ := cmd.Flags().GetInt("chunk")
+			lsPage, _ := cmd.Flags().GetInt("page")
+
+			if lsPage < 1 {
+				fmt.Fprintln(os.Stderr, "Error: --page must be >= 1")
+				return
+			}
+			if lsChunk < 0 {
+				fmt.Fprintln(os.Stderr, "Error: --chunk must be >= 0")
+				return
+			}
+			if lsChunk == 0 && lsPage > 1 {
+				fmt.Fprintln(os.Stderr, "Error: --page requires --chunk")
+				return
+			}
+			orderSelectionCount := 0
+			if lsByPriority {
+				orderSelectionCount++
+			}
+			if lsByDate {
+				orderSelectionCount++
+			}
+			if lsByDateReverse {
+				orderSelectionCount++
+			}
+			if orderSelectionCount > 1 {
+				fmt.Fprintln(os.Stderr, "Error: use only one of --by-priority, --by-date, or --by-date-reverse")
+				return
+			}
+			if lsByPriority {
+				lsOrder = "priority"
+			}
+			if lsByDate {
+				lsOrder = "date"
+			}
+			if lsByDateReverse {
+				lsOrder = "date"
+				lsReverse = true
+			}
 
 			targetPath, remainingArgs := extractTargetPath(args)
 
@@ -155,6 +197,12 @@ func newLsCmd() *cobra.Command {
 
 			// order results
 			sortTasks(tasks, lsOrder, lsReverse, stateCatalog)
+			tasks = paginateTasks(tasks, lsChunk, lsPage)
+
+			if len(tasks) == 0 {
+				fmt.Println("No matches found.")
+				return
+			}
 
 			if jsonOutput {
 				if err := marshalTaskList(tasks); err != nil {
@@ -205,8 +253,13 @@ func newLsCmd() *cobra.Command {
 	cmd.Flags().StringSlice("tag", []string{}, "Filter by tag (can be used multiple times)")
 	cmd.Flags().String("state", "", "Filter by state")
 	cmd.Flags().String("status", "", "Alias for --state")
-	cmd.Flags().String("order", "state", "Order by state or id")
+	cmd.Flags().String("order", "state", "Order by state, id, priority, or date")
 	cmd.Flags().Bool("reverse", false, "Reverse sort order")
+	cmd.Flags().Bool("by-priority", false, "Sort by priority (lowest number first)")
+	cmd.Flags().Bool("by-date", false, "Sort by updated date (oldest first)")
+	cmd.Flags().Bool("by-date-reverse", false, "Sort by updated date (newest first)")
+	cmd.Flags().Int("chunk", 0, "Limit output to N tasks per page (0 means all)")
+	cmd.Flags().Int("page", 1, "1-based page number when using --chunk")
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	cmd.Flags().Bool("ready", false, "Show only tasks whose dependencies are all done")
 
@@ -232,6 +285,36 @@ func sortTasks(tasks []*task.Task, order string, reverse bool, catalog *config.S
 			}
 			return tasks[i].ID < tasks[j].ID
 		})
+	case "priority":
+		sort.Slice(tasks, func(i, j int) bool {
+			pi := tasks[i].Priority
+			pj := tasks[j].Priority
+			if pi == pj {
+				if reverse {
+					return tasks[i].ID > tasks[j].ID
+				}
+				return tasks[i].ID < tasks[j].ID
+			}
+			if reverse {
+				return pi > pj
+			}
+			return pi < pj
+		})
+	case "date", "updated", "updated_at":
+		sort.Slice(tasks, func(i, j int) bool {
+			ti := tasks[i].UpdatedAt
+			tj := tasks[j].UpdatedAt
+			if ti.Equal(tj) {
+				if reverse {
+					return tasks[i].ID > tasks[j].ID
+				}
+				return tasks[i].ID < tasks[j].ID
+			}
+			if reverse {
+				return ti.After(tj)
+			}
+			return ti.Before(tj)
+		})
 	default:
 		orderIndex := buildStateOrderIndex(catalog, tasks)
 		sort.Slice(tasks, func(i, j int) bool {
@@ -251,6 +334,24 @@ func sortTasks(tasks []*task.Task, order string, reverse bool, catalog *config.S
 			return ai < aj
 		})
 	}
+}
+
+func paginateTasks(tasks []*task.Task, chunk, page int) []*task.Task {
+	if chunk <= 0 {
+		return tasks
+	}
+	if page < 1 {
+		page = 1
+	}
+	start := (page - 1) * chunk
+	if start >= len(tasks) {
+		return []*task.Task{}
+	}
+	end := start + chunk
+	if end > len(tasks) {
+		end = len(tasks)
+	}
+	return tasks[start:end]
 }
 
 // read id width from config

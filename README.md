@@ -74,6 +74,10 @@ pin ls                        # all tasks, grouped by state
 pin ls todo                   # filter by state
 pin ls todo --tag launch      # filter by tag
 pin ls --order id             # sort by id instead of state
+pin ls todo --chunk 10        # show first 10 matches
+pin ls todo --chunk 10 --page 2
+pin ls todo --by-priority
+pin ls todo --by-date-reverse
 pin search "release"          # full-text search across title, body, frontmatter
 pin show 12                   # full task detail
 ```
@@ -130,6 +134,7 @@ pin browse todo
 ```
 
 `pin browse` opens a keyboard-driven TUI viewer. Navigate with arrows or `J`/`K`, update state with hotkeys, add notes with `n`, open in your editor with `e`, set priority with `1–9`/`0`, quit with `q`.
+When a state hotkey is used in browse, the state is applied and the cursor advances to the next task.
 
 ---
 
