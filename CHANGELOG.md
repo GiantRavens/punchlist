@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0
+- **MCP server** (`mcp/`) — Model Context Protocol server for AI assistants (Claude Desktop, Claude Code, Cursor, any MCP client).
+- 8 tools: discover, list, get, search, create, update, summary, cross_domain.
+- Metadata-first listing — returns frontmatter only for token efficiency.
+- Recursive domain discovery — finds nested domains (e.g., `work/quantum`) at any depth.
+- State alias resolution — validates against rich `states:` config including aliases.
+- Auto-logging — state, priority, and tag changes append timestamped entries to `## Log`.
+- File naming, slug generation, and section handling match the Go CLI exactly.
+- Atomic writes (write-to-temp-then-rename) for both tasks and config.
+- Python 3.10+, installable via `pip install -e .` from `mcp/` directory.
+
 ## 1.1.0
 - JSON output (`--json`) for `pin ls`, `pin show`, and `pin search` — machine-readable task data for AI agents and scripts.
 - `pin meta <id> [key=value ...]` — freeform metadata for provenance: source, from, to, meeting context, etc.

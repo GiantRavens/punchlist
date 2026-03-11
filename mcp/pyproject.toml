@@ -1,0 +1,17 @@
+[project]
+name = "punchlist-mcp"
+version = "0.1.0"
+description = "MCP server for punchlist task management (md+yaml)"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+    "pyyaml>=6.0",
+    "python-frontmatter>=1.1.0",
+]
+
+[project.scripts]
+punchlist-mcp = "server:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"

@@ -28,6 +28,16 @@ sandbox/
 .serena/
 .punchlist/
 .trash/
+.claude/worktrees/
+
+## Python / MCP server
+mcp/.venv/
+mcp/__pycache__/
+mcp/*.egg-info/
+*.pyc
+
+## Design docs (internal planning, not shipped)
+design/
 
 ## local build output
 pin

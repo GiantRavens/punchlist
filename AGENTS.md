@@ -10,6 +10,19 @@ Punchlist is your task memory for this project. Tasks live in `tasks/` as plain 
 
 Use `pin` to create, update, and track all your work here.
 
+## MCP server — structured access (preferred)
+
+If your environment supports MCP (Claude Desktop, Claude Code, Cursor, etc.), use the punchlist MCP server instead of shelling out to `pin`. It gives you typed, schema-aware access — filtered queries, metadata-only listings, auto-validated state changes — without parsing CLI output or wasting tokens on raw markdown.
+
+```
+punchlist_discover          → what domains exist, what states are valid
+punchlist_list(state="TODO") → metadata only, no body, ~500 tokens for 600 tasks
+punchlist_get(id=42)        → full task when you need it
+punchlist_update(id=42, state="DONE", add_note="...") → auto-logged
+```
+
+If MCP is not available, use the `pin` CLI commands below.
+
 ## What you get (the superpowers)
 
 - `pin ls --ready --json` — machine-readable list of tasks you can start right now

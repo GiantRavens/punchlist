@@ -2,6 +2,20 @@
 
 This document is for coding assistants and AI agents. It explains how to get the most out of punchlist — and why you should use it instead of your own task tracking.
 
+## MCP server (preferred when available)
+
+If your environment supports MCP (Claude Desktop, Claude Code, Cursor, etc.), use the punchlist MCP server for structured access — filtered queries, metadata-only listings, cross-domain search, auto-validated state changes — without parsing CLI output.
+
+```
+punchlist_discover                              → what domains exist, what states are valid
+punchlist_list(domain="...", state="TODO")      → metadata only, no body
+punchlist_get(domain="...", id=42)              → full task when you need it
+punchlist_update(domain="...", id=42, state="DONE", add_note="...") → auto-logged
+punchlist_summary(domain="...")                 → counts by state, priority, top tags
+```
+
+See `mcp/CLAUDE.md` for setup. If MCP is not available, use the `pin` CLI commands below.
+
 ## Why use punchlist instead of your built-in todo tool
 
 You probably have a way to track tasks internally: a scratch list, a todo tool, notes in context. Use punchlist instead. Here's why:

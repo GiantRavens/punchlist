@@ -237,6 +237,101 @@ meta:
 
 ---
 
+## MCP server — structured AI access
+
+The punchlist MCP server gives AI assistants (Claude Desktop, Claude Code, Cursor, or any MCP-compatible client) direct, structured access to your tasks. Instead of grepping markdown files and burning tokens on raw text, the AI navigates typed data: domains, configs, filtered queries, metadata-only listings.
+
+The MCP server is a standalone Python process that reads and writes the same files `pin` does. They coexist — use `pin` from the terminal, use MCP from your AI tools, edit tasks in Obsidian or nvim. The filesystem is the shared contract.
+
+### Why use it?
+
+| Without MCP | With MCP |
+|---|---|
+| AI greps 600 task files to find blocked items | `punchlist_list(state="BLOCK")` — metadata only, ~500 tokens |
+| AI guesses at file naming and config format | `punchlist_create(title="...")` — correct by construction |
+| AI reads entire task bodies to answer summary questions | `punchlist_summary` — counts by state, priority, tags |
+| Context window fills with raw markdown | Metadata-first: bodies only on explicit `punchlist_get` |
+
+### Setup
+
+```bash
+cd mcp/
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+### Configure for Claude Code
+
+Add to your project's `.mcp.json` or `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "punchlist": {
+      "command": "/path/to/punchlist/mcp/.venv/bin/python3",
+      "args": ["/path/to/punchlist/mcp/server.py", "--root", "/path/to/workspace"]
+    }
+  }
+}
+```
+
+### Configure for Claude Desktop
+
+Same JSON format, placed in:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Linux: `~/.config/Claude/claude_desktop_config.json`
+
+### Available tools
+
+| Tool | Purpose | Token cost |
+|---|---|---|
+| `punchlist_discover` | List all domains, states, task counts | Very low |
+| `punchlist_list` | Filtered metadata (no body) — state, tag, priority, search, date | Low |
+| `punchlist_get` | Full task with body, notes, log | Medium |
+| `punchlist_search` | Full-text across titles and bodies | Medium |
+| `punchlist_create` | Create task — auto-ID, correct filename, config update | Low |
+| `punchlist_update` | Change state/priority/tags, add notes — auto-logged | Low |
+| `punchlist_summary` | Dashboard: counts by state, priority, top tags | Medium |
+| `punchlist_cross_domain` | Query across all domains at once | Medium–High |
+
+### Multi-domain workspaces
+
+Point `--root` at a parent directory and the server discovers all nested punchlist domains automatically:
+
+```
+workspace/
+  .punchlist/config.yaml    ← root config (shared defaults)
+  home/
+    .punchlist/config.yaml  ← domain: "home"
+    tasks/
+  work/
+    .punchlist/config.yaml  ← domain: "work"
+    quantum/
+      .punchlist/config.yaml ← domain: "work/quantum" (nested)
+      tasks/
+```
+
+Each domain has its own states, ID counter, and task set. The root config provides fallback defaults.
+
+### Works alongside Obsidian
+
+Task files are plain markdown with YAML frontmatter — Obsidian reads them natively. Point an Obsidian vault at your workspace, edit tasks in Obsidian's editor, and the MCP server sees changes immediately (no caching, no sync). The MCP server adds structured query and mutation that Obsidian doesn't have; Obsidian adds rich editing and linking that the MCP doesn't need.
+
+### Typical AI workflow
+
+```
+1. punchlist_discover        → orient: what domains, what states
+2. punchlist_summary         → lay of the land: counts, recent activity
+3. punchlist_list(state=...) → filtered metadata
+4. punchlist_get(id=...)     → drill into one task
+5. punchlist_update(id=...)  → change state, add notes
+```
+
+For implementation details, see `mcp/PLAN.md` (architecture) and `mcp/CLAUDE.md` (setup guide).
+
+---
+
 ## Configuration
 
 `.punchlist/config.yaml` supports:
@@ -271,6 +366,21 @@ your-project/
     002-review-plan.md
     ...
   .trash/             # deleted tasks land here (not permanently removed)
+```
+
+The punchlist source tree includes:
+
+```
+punchlist/
+  cmd/                # Go CLI commands
+  config/             # config loading and state catalog
+  task/               # task parsing and serialization
+  mcp/                # MCP server (Python, optional)
+    server.py         # MCP server implementation
+    pyproject.toml    # Python package config
+    .venv/            # Python virtual environment (after setup)
+  docs/               # extended documentation
+  AGENTS.md           # machine-facing agent instructions
 ```
 
 Tasks are plain markdown files with YAML frontmatter. Config is plain YAML. Nothing is hidden, encoded, or proprietary.
