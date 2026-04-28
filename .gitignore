@@ -22,6 +22,9 @@ dist/
 ## macOS
 .DS_Store
 
+## Syncthing conflict files
+*.sync-conflict-*
+
 ## Project data / sandbox
 tasks/
 sandbox/
@@ -41,3 +44,6 @@ design/
 
 ## local build output
 pin
+
+## Syncthing conflict files
+*.sync-conflict-*
