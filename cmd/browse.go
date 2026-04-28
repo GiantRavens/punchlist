@@ -39,6 +39,7 @@ type editorFinishedMsg struct {
 type model struct {
 	tasks         []*task.Task
 	cursor        int
+	contentScroll int
 	width         int
 	height        int
 	margin        int
@@ -93,6 +94,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.margin = effectiveBrowseMargin(msg.Width)
 		m.textinput.Width = browseContentWidth(msg.Width, m.margin)
+		m.contentScroll = m.clampContentScroll(m.contentScroll)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -104,11 +106,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "left", "k", "K":
 				if m.cursor > 0 {
 					m.cursor--
+					m.contentScroll = 0
 				}
 			case "right", "j", "J", " ":
 				if m.cursor < len(m.tasks)-1 {
 					m.cursor++
+					m.contentScroll = 0
 				}
+			case "up":
+				m.contentScroll--
+				if m.contentScroll < 0 {
+					m.contentScroll = 0
+				}
+			case "down":
+				m.contentScroll++
+				m.contentScroll = m.clampContentScroll(m.contentScroll)
+			case "pgup", "ctrl+u":
+				m.contentScroll -= browseScrollPage(m.height)
+				if m.contentScroll < 0 {
+					m.contentScroll = 0
+				}
+			case "pgdown", "ctrl+d":
+				m.contentScroll += browseScrollPage(m.height)
+				m.contentScroll = m.clampContentScroll(m.contentScroll)
+			case "home":
+				m.contentScroll = 0
+			case "end":
+				m.contentScroll = m.maxContentScroll()
 			case "n":
 				m.mode = modeNote
 				m.textinput.Focus()
@@ -169,6 +193,35 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m model) clampContentScroll(scroll int) int {
+	if scroll < 0 {
+		return 0
+	}
+	maxScroll := m.maxContentScroll()
+	if scroll > maxScroll {
+		return maxScroll
+	}
+	return scroll
+}
+
+func (m model) maxContentScroll() int {
+	if len(m.tasks) == 0 || m.cursor < 0 || m.cursor >= len(m.tasks) || m.width == 0 {
+		return 0
+	}
+	currentTask := m.tasks[m.cursor]
+	contentWidth := browseContentWidth(m.width, m.margin)
+	mainContent := renderBrowseContent(currentTask, contentWidth, m.stateCatalog)
+	helpHeight := lipgloss.Height(m.browseHelpText())
+	fullContentHeight := lipgloss.Height(mainContent)
+	topPad := browseTopPadding(m.height, fullContentHeight, helpHeight)
+	viewportHeight := m.height - topPad - helpHeight
+	if viewportHeight < 1 {
+		viewportHeight = 1
+	}
+	_, _, maxScroll := scrollBrowseContent(mainContent, viewportHeight, 0)
+	return maxScroll
+}
+
 func applyStateChange(m model, newState task.State) (model, tea.Cmd) {
 	if len(m.tasks) == 0 {
 		return m, nil
@@ -185,6 +238,7 @@ func applyStateChange(m model, newState task.State) (model, tea.Cmd) {
 	}
 	if m.cursor < len(m.tasks)-1 {
 		m.cursor++
+		m.contentScroll = 0
 	}
 	return m, nil
 }
@@ -356,13 +410,7 @@ func (m model) View() string {
 	case modeNote:
 		help = "enter: save note  esc: cancel\n" + m.textinput.View()
 	default: // modeBrowse
-		stateHelp := ""
-		if m.stateHelpLine != "" {
-			stateHelp = m.stateHelpLine + "  "
-		}
-		help = "←/K: prev  →/J/space: next\n" +
-			stateHelp +
-			"n:note  e:edit  1-0:pri  q:quit"
+		help = m.browseHelpText()
 	}
 	if debugEnabled {
 		titleLen := len([]rune(currentTask.Title))
@@ -378,9 +426,15 @@ func (m model) View() string {
 		)
 	}
 
-	contentHeight := lipgloss.Height(mainContent)
 	helpHeight := lipgloss.Height(help)
-	topPad := browseTopPadding(m.height, contentHeight, helpHeight)
+	fullContentHeight := lipgloss.Height(mainContent)
+	topPad := browseTopPadding(m.height, fullContentHeight, helpHeight)
+	viewportHeight := m.height - topPad - helpHeight
+	if viewportHeight < 1 {
+		viewportHeight = 1
+	}
+	mainContent, _, _ = scrollBrowseContent(mainContent, viewportHeight, m.contentScroll)
+	contentHeight := lipgloss.Height(mainContent)
 	spacerHeight := m.height - topPad - contentHeight - helpHeight
 	if spacerHeight < 0 {
 		spacerHeight = 0
@@ -399,6 +453,16 @@ func (m model) View() string {
 		view = topSpacer + view
 	}
 	return applyLeftMargin(view, m.margin)
+}
+
+func (m model) browseHelpText() string {
+	stateHelp := ""
+	if m.stateHelpLine != "" {
+		stateHelp = m.stateHelpLine + "  "
+	}
+	return "←/K: prev  →/J/space: next  ↑/↓: scroll  pgup/pgdn: page\n" +
+		stateHelp +
+		"n:note  e:edit  1-0:pri  q:quit"
 }
 
 func newBrowseCmd() *cobra.Command {
@@ -543,6 +607,36 @@ func browseTopPadding(height, contentHeight, helpHeight int) int {
 		return 0
 	}
 	return 1
+}
+
+func browseScrollPage(height int) int {
+	page := height - 5
+	if page < 1 {
+		return 1
+	}
+	return page
+}
+
+func scrollBrowseContent(content string, viewportHeight, scroll int) (string, int, int) {
+	if viewportHeight <= 0 {
+		viewportHeight = 1
+	}
+	lines := strings.Split(content, "\n")
+	maxScroll := len(lines) - viewportHeight
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if scroll < 0 {
+		scroll = 0
+	}
+	if scroll > maxScroll {
+		scroll = maxScroll
+	}
+	end := scroll + viewportHeight
+	if end > len(lines) {
+		end = len(lines)
+	}
+	return strings.Join(lines[scroll:end], "\n"), scroll, maxScroll
 }
 
 func applyLeftMargin(text string, margin int) string {

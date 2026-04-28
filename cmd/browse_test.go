@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"punchlist/task"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestRenderBrowseContentShowsTitle(t *testing.T) {
@@ -122,5 +125,85 @@ func TestApplyStateChangeDoesNotAdvancePastLastTask(t *testing.T) {
 
 	if updated.cursor != 0 {
 		t.Fatalf("expected cursor to remain at 0, got %d", updated.cursor)
+	}
+}
+
+func TestBrowseViewStartsLongTaskAtTopAndKeepsFooter(t *testing.T) {
+	now := time.Date(2026, 1, 29, 12, 0, 0, 0, time.UTC)
+	bodyLines := []string{"# Long task"}
+	for i := 1; i <= 30; i++ {
+		bodyLines = append(bodyLines, "line "+strconv.Itoa(i))
+	}
+	tsk := &task.Task{
+		ID:        6,
+		Title:     "Long task",
+		State:     task.StateTodo,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Body:      strings.Join(bodyLines, "\n"),
+	}
+
+	m := model{
+		tasks:  []*task.Task{tsk},
+		cursor: 0,
+		width:  100,
+		height: 8,
+		margin: 0,
+		mode:   modeBrowse,
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "Long task") {
+		t.Fatalf("expected initial view to include task title, got:\n%s", view)
+	}
+	if !strings.Contains(view, "line 1") {
+		t.Fatalf("expected initial view to start at top of body, got:\n%s", view)
+	}
+	if strings.Contains(view, "line 30") {
+		t.Fatalf("expected initial view to hide bottom of long body, got:\n%s", view)
+	}
+	if !strings.Contains(view, "q:quit") {
+		t.Fatalf("expected fixed footer to remain visible, got:\n%s", view)
+	}
+}
+
+func TestBrowseViewScrollsLongTaskBody(t *testing.T) {
+	now := time.Date(2026, 1, 29, 12, 0, 0, 0, time.UTC)
+	bodyLines := []string{"# Long task"}
+	for i := 1; i <= 30; i++ {
+		bodyLines = append(bodyLines, "line "+strconv.Itoa(i))
+	}
+	tsk := &task.Task{
+		ID:        6,
+		Title:     "Long task",
+		State:     task.StateTodo,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Body:      strings.Join(bodyLines, "\n"),
+	}
+
+	m := model{
+		tasks:  []*task.Task{tsk},
+		cursor: 0,
+		width:  100,
+		height: 8,
+		margin: 0,
+		mode:   modeBrowse,
+	}
+
+	updatedModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	updated, ok := updatedModel.(model)
+	if !ok {
+		t.Fatalf("expected model, got %T", updatedModel)
+	}
+	view := updated.View()
+	if strings.Contains(view, "line 1") {
+		t.Fatalf("expected scrolled view to hide top body line, got:\n%s", view)
+	}
+	if !strings.Contains(view, "line 30") {
+		t.Fatalf("expected scrolled view to show bottom body line, got:\n%s", view)
+	}
+	if !strings.Contains(view, "q:quit") {
+		t.Fatalf("expected fixed footer to remain visible after scroll, got:\n%s", view)
 	}
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+- `pin browse` now keeps the task detail pane scrollable for long tasks while preserving the fixed footer/key command area.
+- Added browse keys for long task bodies: `↑`/`↓`, `pgup`/`pgdn`, `home`, and `end`; moving to another task resets the detail view to the top.
+
 ## 1.2.0
 - **MCP server** (`mcp/`) — Model Context Protocol server for AI assistants (Claude Desktop, Claude Code, Cursor, any MCP client).
 - 8 tools: discover, list, get, search, create, update, summary, cross_domain.

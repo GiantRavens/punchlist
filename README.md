@@ -133,7 +133,7 @@ pin browse
 pin browse todo
 ```
 
-`pin browse` opens a keyboard-driven TUI viewer. Navigate with arrows or `J`/`K`, update state with hotkeys, add notes with `n`, open in your editor with `e`, set priority with `1–9`/`0`, quit with `q`.
+`pin browse` opens a keyboard-driven TUI viewer. Move between tasks with `←`/`→`, `K`/`J`, or `space`; scroll long task bodies with `↑`/`↓`, `pgup`/`pgdn`, `home`, and `end`; update state with hotkeys, add notes with `n`, open in your editor with `e`, set priority with `1–9`/`0`, quit with `q`.
 When a state hotkey is used in browse, the state is applied and the cursor advances to the next task.
 
 ---
