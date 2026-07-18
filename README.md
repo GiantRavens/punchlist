@@ -28,7 +28,7 @@ Punchlist sits in the middle: **every task is a plain markdown file with YAML fr
 ## Install
 
 ```bash
-brew install giantravens/tap/pin
+brew install giantravens/tap/punchlist
 ```
 
 Shell completions for bash and zsh are installed automatically. To build from source instead: `./scripts/install_binary.sh` (or `BINDIR=/some/bin ./scripts/install_binary.sh` for a custom, sudo-free location).
