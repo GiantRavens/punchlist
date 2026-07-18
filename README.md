@@ -53,7 +53,7 @@ Shell completions for bash and zsh are installed automatically. To build from so
 ## Quick start
 
 ```bash
-pin init                              # initialize any folder as a punchlist project
+pin init                              # initialize and declare any folder as a punchlist scope
 pin "write release plan" pri:1        # create a task (defaults to TODO)
 pin ls                                # list all tasks
 pin browse                            # interactive TUI browser
