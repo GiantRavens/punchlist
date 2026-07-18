@@ -11,6 +11,8 @@
 
 A lightweight, local, markdown-native task and ticket system for humans and AI agents — persistent task memory that survives the session. No database, no app, no account required.
 
+![pin ls and a raw task file: acceptance criteria, agent notes, and a timestamped log — all plain markdown](docs/images/punchlist-demo.png)
+
 ## Why punchlist?
 
 Most task tools are apps: databases behind a UI, locked to a service, requiring context-switches away from your work. GitHub Issues are powerful but heavy — and don't travel with your local project. Plain text files are too loose to query or automate.
