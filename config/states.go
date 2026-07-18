@@ -197,6 +197,13 @@ func effectiveStatesAndOrder(cfg *Config) ([]StateConfig, []string) {
 		return DefaultStates(), DefaultLsStateOrder()
 	}
 	if len(cfg.States) > 0 {
+		// an explicit ls_state_order wins even alongside explicit states —
+		// previously it was silently discarded here, so states declared only
+		// in the ordering (e.g. BACKLOG) never registered in the catalog and
+		// were flagged unknown by doctor while ls grouped by them just fine
+		if len(cfg.LsStateOrder) > 0 {
+			return cfg.States, cfg.LsStateOrder
+		}
 		order := make([]string, 0, len(cfg.States))
 		for _, st := range cfg.States {
 			order = append(order, st.Name)

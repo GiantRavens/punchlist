@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.3.1
+- State catalog fix: an explicit `ls_state_order` now registers its states in the catalog even when explicit `states:` are also present. Previously the ordering was silently discarded in that case, so order-declared states (BACKLOG, TEST, BLOCK, DUPLICATE) resolved nowhere: `pin ls` grouped by them but `pin doctor` flagged every use as `unknown_state` — 2,058 false findings in one scope. Regression test locks the contract: order-only states resolve (case-insensitively) and hold their declared position.
+
 ## 1.3.0
 - `findTaskFile` now walks `tasks/` recursively, matching `pin ls` — by-id commands (`show`, `note`, `pri`, `due`, `tag`, `meta`, `edit`, `del`, acceptance, deps) previously failed on tasks in subfolders that `ls` had just listed (surfaced by the futhark bridge punchlist deck). Ambiguous ids (same id in two files) are refused with both paths named.
 - Error paths now exit non-zero. New `failf` helper records the failure and `Execute` applies it after the write-lock post-run releases (never `os.Exit` mid-command). Previously `pin show <missing-id>` printed to stderr and exited 0, which callers could not distinguish from success. In-walk parse messages in `ls`/`search` remain warnings (rc 0 — the listing still succeeds).
