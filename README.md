@@ -9,7 +9,7 @@
 
 # punchlist
 
-A lightweight, local, markdown-native task and ticket system for humans and AI agents — no database, no app, no account required.
+A lightweight, local, markdown-native task and ticket system for humans and AI agents — persistent task memory that survives the session. No database, no app, no account required.
 
 ## Why punchlist?
 
@@ -21,14 +21,27 @@ Punchlist sits in the middle: **every task is a plain markdown file with YAML fr
 - **No app.** Open any task in nvim, VS Code, Obsidian, or anything else.
 - **No lock-in.** Plain markdown and YAML. If you stop using `pin`, your files are still there.
 - **Travels with your project.** Commit your tasks alongside your code.
-- **Works with your AI assistant.** JSON output, structured metadata, dependency tracking, and acceptance criteria make punchlist a first-class context layer for AI agents and coding tools.
+
+---
+
+## Task memory and telemetry for AI agents
+
+LLM coding agents have no memory: their internal task lists vanish when the session ends, and re-reading a whole backlog into context is expensive. Punchlist is built to be the persistent, token-efficient layer between the two:
+
+- **Survives the session.** Tasks are files. An agent that files its work in punchlist hands the next session — or the human — a complete, current picture instead of nothing.
+- **Token-efficient reads.** Listing is metadata-first: `pin ls --json` returns frontmatter only, roughly 500 tokens for 600 tasks over the MCP server. Full bodies load one task at a time with `pin show --json`, only when needed.
+- **Telemetry, not just state.** Every state, priority, and tag change appends a timestamped entry to the task's `## Log` — an audit trail either species can replay to answer "what happened while I was gone." Notes (`pin note`) capture decisions in place.
+- **Verifiable completion.** `## Acceptance` checkboxes are structured criteria: an agent ticks them with `pin check` as it works, a human audits them before closing. `depends:` wiring plus `pin ls --ready` gives agents a planning surface — what is actually unblocked right now.
+- **A substrate that checks itself.** `pin doctor --json` machine-verifies every task file — states, sections, ids, dependencies, timestamps — with stable check names and lint-style exit codes, so health monitoring can be automated. `--fix` repairs the mechanically safe classes.
+- **One surface for both species.** Humans get the TUI, `$EDITOR`, and clean markdown that renders properly on the web; agents get JSON, the MCP server, and the `AGENTS.md` convention. Same files, no translation layer — agent work is visible to humans, human corrections are visible to agents.
 
 ---
 
 ## Install
 
 ```bash
-brew install giantravens/tap/punchlist
+brew install giantravens/tap/punchlist    # installs the `pin` CLI
+brew upgrade punchlist                    # get new releases later
 ```
 
 Shell completions for bash and zsh are installed automatically. To build from source instead: `./scripts/install_binary.sh` (or `BINDIR=/some/bin ./scripts/install_binary.sh` for a custom, sudo-free location).
