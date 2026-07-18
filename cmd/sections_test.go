@@ -187,6 +187,31 @@ func TestAppendEntry(t *testing.T) {
 			t.Errorf("expected new entry in result, got %q", result)
 		}
 	})
+
+	// 1.3.2 tight-list contract: consecutive entries share consecutive
+	// lines; only the heading is separated by a blank line.
+	t.Run("appends tight after an existing list item", func(t *testing.T) {
+		result := appendEntry("## Log\n\n- first", "- second")
+		want := "## Log\n\n- first\n- second\n\n"
+		if result != want {
+			t.Errorf("expected tight list emission %q, got %q", want, result)
+		}
+	})
+
+	t.Run("first item after bare heading keeps blank separator", func(t *testing.T) {
+		result := appendEntry("## Log", "- first")
+		want := "## Log\n\n- first\n\n"
+		if result != want {
+			t.Errorf("expected blank line after heading %q, got %q", want, result)
+		}
+	})
+
+	t.Run("appends tight to a legacy loose list", func(t *testing.T) {
+		result := appendEntry("## Log\n\n- first\n\n- second", "- third")
+		if !strings.HasSuffix(strings.TrimRight(result, "\n"), "- second\n- third") {
+			t.Errorf("expected new entry tight against the last loose item, got %q", result)
+		}
+	})
 }
 
 func TestJoinBlocks(t *testing.T) {

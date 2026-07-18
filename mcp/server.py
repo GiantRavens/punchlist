@@ -144,11 +144,15 @@ def split_section(body: str, heading: str) -> tuple[str, str, str, bool]:
 
 
 def append_entry(section: str, entry: str) -> str:
-    """Append a list entry to a section with spacing."""
+    """Append a list entry to a section as a TIGHT markdown list (matches
+    Go's appendEntry since 1.3.2): consecutive "- " lines, blank line only
+    between the heading and the first item. Loose pre-1.3.2 files stay valid."""
     section = section.rstrip("\n")
     if not section:
         return entry + "\n\n"
-    return section + "\n\n" + entry + "\n\n"
+    last_line = section.rsplit("\n", 1)[-1]
+    separator = "\n" if last_line.strip().startswith("- ") else "\n\n"
+    return section + separator + entry + "\n\n"
 
 
 def join_blocks(*blocks: str) -> str:

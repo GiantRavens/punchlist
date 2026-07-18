@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.3.2
+- Log and Notes entries are now emitted as TIGHT markdown lists — consecutive `- ` lines with a blank line only between the heading and the first item. The previous emission put a blank line between every entry (a "loose" CommonMark list), which wraps each item in `<p>` when rendered — extra vertical spacing on web surfaces (forge bridge, Obsidian, GitHub) and two lines of file growth per entry. Applied in both the Go CLI (`appendEntry`) and the Python MCP server (`append_entry`, verified byte-for-byte against Go); `doctor --fix` section merges also rewrite tight, so legacy loose files converge opportunistically as they're touched. Existing loose files remain valid and are not flagged; parsers accept both forms.
+
 ## 1.3.1
 - State catalog fix: an explicit `ls_state_order` now registers its states in the catalog even when explicit `states:` are also present. Previously the ordering was silently discarded in that case, so order-declared states (BACKLOG, TEST, BLOCK, DUPLICATE) resolved nowhere: `pin ls` grouped by them but `pin doctor` flagged every use as `unknown_state` — 2,058 false findings in one scope. Regression test locks the contract: order-only states resolve (case-insensitively) and hold their declared position.
 

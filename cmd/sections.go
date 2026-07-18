@@ -45,12 +45,31 @@ func indexOfHeadingLine(body, heading string) int {
 }
 
 // append a list entry to a section with spacing
+// appendEntry adds a list entry to a section, emitting a TIGHT markdown
+// list: consecutive "- " lines with no blanks between items (the idiomatic
+// form for a chronological log, and what web renderers space correctly).
+// A blank line still separates the section heading from its first item.
+// Existing loose-list files (blank lines between items, the pre-1.3.2
+// emission) stay valid — parsers accept both; only new entries are tight.
 func appendEntry(section, entry string) string {
 	section = strings.TrimRight(section, "\n")
 	if section == "" {
 		return entry + "\n\n"
 	}
-	return section + "\n\n" + entry + "\n\n"
+	separator := "\n"
+	if !strings.HasPrefix(strings.TrimSpace(lastLine(section)), "- ") {
+		// after the bare heading (or non-list text), open the list with a
+		// blank line so the heading and list stay distinct blocks
+		separator = "\n\n"
+	}
+	return section + separator + entry + "\n\n"
+}
+
+func lastLine(text string) string {
+	if idx := strings.LastIndex(text, "\n"); idx != -1 {
+		return text[idx+1:]
+	}
+	return text
 }
 
 // join markdown blocks with blank lines and trim edges

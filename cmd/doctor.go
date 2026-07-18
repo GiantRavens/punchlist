@@ -329,7 +329,8 @@ func mergeDuplicateSections(path, heading string) (bool, error) {
 		return false, nil
 	}
 
-	merged := heading + "\n\n" + strings.Join(entries, "\n\n")
+	// tight list on rewrite: repaired files converge to the 1.3.2 emission
+	merged := heading + "\n\n" + strings.Join(entries, "\n")
 	kept[placeholder] = merged
 	for len(kept) > 0 && strings.TrimSpace(kept[len(kept)-1]) == "" {
 		kept = kept[:len(kept)-1]
