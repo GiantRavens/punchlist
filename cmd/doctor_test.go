@@ -176,6 +176,102 @@ func TestDoctorFixMergesDuplicateNotesBeforeLog(t *testing.T) {
 	}
 }
 
+func TestDoctorFixTightensLooseLists(t *testing.T) {
+	teardown := doctorSetupScope(t)
+	defer teardown()
+	if _, err := executeCommand("todo", "loose legacy task"); err != nil {
+		t.Fatal(err)
+	}
+	path := doctorFindTask(t, "loose-legacy")
+	raw, _ := os.ReadFile(path)
+	// simulate the pre-1.3.2 loose emission: blank lines between Log
+	// entries (single-line by contract), and a loose Notes section whose
+	// indented continuation line must stay with its item after tightening
+	body := strings.TrimRight(string(raw), "\n")
+	body = strings.Replace(body, "## Log", "## Notes\n\n- 2026-01-01T00:00:00Z: first note\n\n- 2026-01-02T00:00:00Z: second note\n  continuation line\n\n## Log", 1)
+	text := body + "\n\n- 2026-01-03T00:00:00Z: second log entry\n"
+	if err := os.WriteFile(path, []byte(text), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := executeCommand("doctor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "loose_list") {
+		t.Fatalf("expected loose_list finding, got:\n%s", out)
+	}
+	if exitCode != 0 {
+		t.Fatalf("info-only findings must not fail the run, got exit %d", exitCode)
+	}
+
+	if _, err := executeCommand("doctor", "--fix"); err != nil {
+		t.Fatal(err)
+	}
+	repaired, _ := os.ReadFile(path)
+	got := string(repaired)
+	if !strings.Contains(got, "first note\n- 2026-01-02") {
+		t.Fatalf("expected tight Notes list:\n%s", got)
+	}
+	if !strings.Contains(got, "second note\n  continuation line") {
+		t.Fatalf("expected continuation line kept with its item:\n%s", got)
+	}
+	if !strings.Contains(got, "Created task\n- 2026-01-03") {
+		t.Fatalf("expected tight Log list:\n%s", got)
+	}
+	if strings.Contains(got, "note\n\n- ") || strings.Contains(got, "task\n\n- ") {
+		t.Fatalf("expected no blank lines between entries:\n%s", got)
+	}
+
+	// idempotent and clean afterwards
+	out, err = executeCommand("doctor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "0 findings") {
+		t.Fatalf("expected clean report after tightening, got:\n%s", out)
+	}
+}
+
+func TestDoctorFixHandlesDuplicateAndLooseTogether(t *testing.T) {
+	teardown := doctorSetupScope(t)
+	defer teardown()
+	if _, err := executeCommand("todo", "combined defects task"); err != nil {
+		t.Fatal(err)
+	}
+	path := doctorFindTask(t, "combined-defects")
+	raw, _ := os.ReadFile(path)
+	text := strings.TrimRight(string(raw), "\n") + "\n\n- 2026-01-02T00:00:00Z: loose second entry\n\n## Log\n\n- 2026-01-03T00:00:00Z: duplicate section entry\n"
+	if err := os.WriteFile(path, []byte(text), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := executeCommand("doctor", "--fix")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "fixed") {
+		t.Fatalf("expected fixes applied, got:\n%s", out)
+	}
+	repaired, _ := os.ReadFile(path)
+	body := string(repaired)
+	if got := strings.Count(body, "\n## Log\n"); got != 1 {
+		t.Fatalf("expected one Log section, got %d:\n%s", got, body)
+	}
+	for _, want := range []string{"Created task", "loose second entry", "duplicate section entry"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("expected entry %q preserved:\n%s", want, body)
+		}
+	}
+	out, err = executeCommand("doctor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "0 findings") {
+		t.Fatalf("expected clean report, got:\n%s", out)
+	}
+}
+
 func TestDoctorNextIDDrift(t *testing.T) {
 	teardown := doctorSetupScope(t)
 	defer teardown()

@@ -49,10 +49,11 @@ func newDoctorCmd() *cobra.Command {
 		Long: "Audit every task file in the scope for problems that parse cleanly but are wrong: " +
 			"unknown states, duplicated sections, duplicate or mismatched ids, dangling dependencies, " +
 			"malformed checkboxes, stray lines in the log, title/H1 divergence, and next_id drift. " +
-			"--fix applies only mechanically safe repairs (currently: merging duplicated Log and Notes " +
-			"sections, preserving every entry). Judgment-shaped findings are always report-only. " +
-			"Exits 0 when the scope is clean (or every finding was fixed), 1 when findings remain; " +
-			"consume --json for automation.",
+			"--fix applies only mechanically safe repairs: merging duplicated Log and Notes sections " +
+			"and tightening pre-1.3.2 loose lists (blank lines between entries), preserving every " +
+			"entry. Judgment-shaped findings are always report-only. Exits 0 when clean (or every " +
+			"finding was fixed); 1 when error/warning findings remain — cosmetic info findings never " +
+			"fail the run. Consume --json for automation.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			report, err := runDoctor(fix)
 			if err != nil {
@@ -70,11 +71,16 @@ func newDoctorCmd() *cobra.Command {
 			} else {
 				printDoctorReport(report, fix)
 			}
-			// lint-style exit status: remaining findings mean the substrate
-			// is not healthy. The findings on stdout are the message, so no
-			// extra stderr line — just the status for scripts and sensors.
-			if len(report.Findings) > report.Fixed {
-				exitCode = 1
+			// lint-style exit status: remaining error/warning findings mean
+			// the substrate is not healthy. Cosmetic info findings (loose
+			// lists) never fail the run. The findings on stdout are the
+			// message, so no extra stderr line — just the status for
+			// scripts and sensors.
+			for _, f := range report.Findings {
+				if !f.Fixed && f.Severity != "info" {
+					exitCode = 1
+					break
+				}
 			}
 			return nil
 		},
@@ -187,6 +193,12 @@ func runDoctor(fix bool) (*doctorReport, error) {
 			}
 		}
 
+		for _, heading := range []string{"## Log", "## Notes"} {
+			if countHeadingLines(t.Body, heading) == 1 && sectionHasInternalBlanks(t.Body, heading) {
+				flag("loose_list", "info", fmt.Sprintf("%s entries separated by blank lines (pre-1.3.2 loose emission)", heading), true)
+			}
+		}
+
 		if h1 := firstH1(t.Body); h1 != "" && t.Title != "" {
 			titleNorm := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSpace(t.Title), "..."), "…")
 			if !strings.HasPrefix(h1, titleNorm) && !strings.HasPrefix(titleNorm, h1) {
@@ -226,7 +238,7 @@ func runDoctor(fix bool) (*doctorReport, error) {
 	if fix {
 		if err := withProjectWriteLock(root, func() error {
 			for i, f := range report.Findings {
-				if !f.Fixable || f.Check != "duplicate_section" {
+				if !f.Fixable || (f.Check != "duplicate_section" && f.Check != "loose_list") {
 					continue
 				}
 				heading := "## Log"
@@ -234,12 +246,15 @@ func runDoctor(fix bool) (*doctorReport, error) {
 					heading = "## Notes"
 				}
 				path := filepath.Join(root, f.File)
-				if repaired, err := mergeDuplicateSections(path, heading); err != nil {
+				// tightenSection is idempotent: it merges duplicates and
+				// removes internal blanks in one rewrite, so a file carrying
+				// both findings is fully repaired on the first call and the
+				// second is a no-op — both findings are resolved either way.
+				if _, err := tightenSection(path, heading); err != nil {
 					return fmt.Errorf("fixing %s: %w", f.File, err)
-				} else if repaired {
-					report.Findings[i].Fixed = true
-					report.Fixed++
 				}
+				report.Findings[i].Fixed = true
+				report.Fixed++
 			}
 			return nil
 		}); err != nil {
@@ -247,9 +262,10 @@ func runDoctor(fix bool) (*doctorReport, error) {
 		}
 	}
 
+	severityRank := map[string]int{"error": 0, "warning": 1, "info": 2}
 	sort.SliceStable(report.Findings, func(i, j int) bool {
 		if report.Findings[i].Severity != report.Findings[j].Severity {
-			return report.Findings[i].Severity == "error"
+			return severityRank[report.Findings[i].Severity] < severityRank[report.Findings[j].Severity]
 		}
 		return report.Findings[i].File < report.Findings[j].File
 	})
@@ -275,14 +291,38 @@ func firstH1(body string) string {
 	return ""
 }
 
-// mergeDuplicateSections rewrites a task file whose body contains more than
-// one occurrence of the given heading line: every entry from every such
-// section is preserved in encounter order under a single merged section at
-// the position where the first occurrence stood (keeping Notes before Log
-// per pin's layout). The frontmatter block is preserved byte-for-byte —
-// this is raw text surgery, not a parse/serialize roundtrip, so nothing
-// else in the file changes.
-func mergeDuplicateSections(path, heading string) (bool, error) {
+// sectionHasInternalBlanks reports whether the given section's content has
+// blank lines between its entries — the pre-1.3.2 loose-list emission.
+func sectionHasInternalBlanks(body, heading string) bool {
+	_, section, _, found := splitSection(body, heading)
+	if !found {
+		return false
+	}
+	lines := strings.Split(section, "\n")[1:] // drop the heading line
+	seenContent := false
+	pendingBlank := false
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			if seenContent {
+				pendingBlank = true
+			}
+			continue
+		}
+		if pendingBlank {
+			return true // blank line(s) between two content lines
+		}
+		seenContent = true
+	}
+	return false
+}
+
+// tightenSection rewrites all occurrences of the given heading into one
+// tight section: duplicates merged, every entry preserved in encounter
+// order, internal blank lines removed, placed where the first occurrence
+// stood (keeping Notes before Log per pin's layout). Idempotent. The
+// frontmatter block is preserved byte-for-byte — this is raw text surgery,
+// not a parse/serialize roundtrip, so nothing else in the file changes.
+func tightenSection(path, heading string) (bool, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
@@ -325,7 +365,7 @@ func mergeDuplicateSections(path, heading string) (bool, error) {
 		}
 		kept = append(kept, line)
 	}
-	if sectionCount < 2 {
+	if sectionCount == 0 {
 		return false, nil
 	}
 
@@ -336,6 +376,9 @@ func mergeDuplicateSections(path, heading string) (bool, error) {
 		kept = kept[:len(kept)-1]
 	}
 	rebuilt := strings.Join(kept, "\n") + "\n"
+	if rebuilt == body {
+		return false, nil
+	}
 
 	tmp := path + ".doctor-tmp"
 	if err := os.WriteFile(tmp, []byte(front+rebuilt), 0644); err != nil {
