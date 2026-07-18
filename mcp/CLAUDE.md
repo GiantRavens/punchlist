@@ -1,188 +1,117 @@
-# Punchlist MCP — Implementation & Setup Guide
+# Punchlist MCP — Implementation and Setup
 
-This is a guide for configuring and extending the Punchlist MCP server.
+The Punchlist MCP server exposes punchlist task domains to AI assistants over the Model Context Protocol. It is the "Serena for tasks" idea — structured, typed, schema-aware access so an LLM can navigate domains and task metadata without grepping markdown files.
 
-## Quick Start
+The Go CLI (`pin`) and this MCP are the two sanctioned ways to interact with punchlist task files. **Never edit task `.md` files directly** — both paths preserve frontmatter, `next_id`, and the `## Log` invariant; direct edits do not.
 
-### 1. Install dependencies
+This server is the canonical implementation. An earlier parallel `code/punchlist/mcp-server/` directory was consolidated into this one on 2026-05-22 and archived under `.trash/punchlist/`. The original design rationale lives at `code/punchlist/design/mcp-server.md`.
 
-```bash
-cd mcp/
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
+## Quick start (Linux, primary host)
 
-### 2. Test the server standalone
+The server is installed and wired up at session time on futhark. If you need to rebuild:
 
 ```bash
-source .venv/bin/activate
-python3 server.py --root /path/to/your/workspace
-# Logs to stderr: "Discovered N domain(s): ['work/quantum', ...]"
-# Then waits for MCP stdio input (ctrl-c to exit)
+cd /home/skip/Desktop/notebook/code/punchlist/mcp
+uv venv .venv --python 3.11
+uv pip install -p .venv/bin/python -e .
 ```
 
-### 3. Configure for Claude Code
+Smoke test (the server discovers all `.punchlist/` directories under `--root`, logs to stderr, then waits on stdio):
 
-Add to your project's `.mcp.json` or `~/.claude.json`:
+```bash
+.venv/bin/python -c "
+from pathlib import Path
+import sys; sys.path.insert(0, '.')
+from server import PunchlistWorkspace
+ws = PunchlistWorkspace(Path('/home/skip/Desktop/notebook'))
+print(len(ws.domains), 'domains:', list(ws.domains.keys()))
+"
+```
+
+Expected: 22 domains across `forge/`, `work/`, `code/`, `cook/`, `write/`, `projects/`, plus the `_root` domain.
+
+## Wiring
+
+Configured in `~/.claude.json` under the top-level `mcpServers` key (user scope — every Claude session on this machine sees it, regardless of cwd):
 
 ```json
 {
   "mcpServers": {
     "punchlist": {
-      "command": "/absolute/path/to/mcp/.venv/bin/python3",
-      "args": ["/absolute/path/to/mcp/server.py", "--root", "/absolute/path/to/workspace"]
+      "command": "/home/skip/Desktop/notebook/code/punchlist/mcp/.venv/bin/python",
+      "args": [
+        "/home/skip/Desktop/notebook/code/punchlist/mcp/server.py",
+        "--root",
+        "/home/skip/Desktop/notebook"
+      ]
     }
   }
 }
 ```
 
-Or using env var:
+The same block also holds `knowledge-forge` and `media-forge`. To add the MCP for other LLM clients (Codex, Cursor, Claude Desktop), use the same `command`/`args` shape — the server is stdio-only and client-agnostic.
 
-```json
-{
-  "mcpServers": {
-    "punchlist": {
-      "command": "/absolute/path/to/mcp/.venv/bin/python3",
-      "args": ["/absolute/path/to/mcp/server.py"],
-      "env": {
-        "PUNCHLIST_ROOT": "/absolute/path/to/workspace"
-      }
-    }
-  }
-}
-```
-
-### 4. Configure for Claude Desktop
-
-Same config format, placed in:
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Linux: `~/.config/Claude/claude_desktop_config.json`
+Mac note: the `.venv/` is excluded from Syncthing (`.stignore`), so if you ever drive sessions from the Mac side, rebuild the venv locally there. Linux is the primary host; cross-host concerns are a fallback path.
 
 ## Architecture
 
 ```
-workspace/                    <-- PUNCHLIST_ROOT
-+-- .punchlist/config.yaml    <-- root fallback config
-+-- home/
-|   +-- .punchlist/config.yaml  <-- domain: "home"
+PUNCHLIST_ROOT/                       <-- --root argument (or PUNCHLIST_ROOT env)
++-- .punchlist/config.yaml             <-- root fallback config (optional)
++-- forge/knowledge-forge/
+|   +-- .punchlist/config.yaml         <-- domain: "forge/knowledge-forge"
 |   +-- tasks/
-+-- work/
-|   +-- .punchlist/config.yaml  <-- domain: "work"
-|   +-- quantum/
-|       +-- .punchlist/config.yaml  <-- domain: "work/quantum"
-|       +-- tasks/
-+-- omni/
-    +-- .punchlist/config.yaml  <-- domain: "omni"
++-- work/quantum/
+|   +-- .punchlist/config.yaml         <-- domain: "work/quantum"
+|   +-- tasks/
++-- code/punchlist/
+    +-- .punchlist/config.yaml         <-- domain: "code/punchlist"
     +-- tasks/
 ```
 
-The server walks PUNCHLIST_ROOT recursively for `.punchlist/` directories. Each one becomes a "domain" named by its relative path (e.g., `work/quantum`). The filesystem IS the database — no SQLite, no cache, no sync issues.
+The server walks the root recursively for `.punchlist/` directories. Each one becomes a domain named by its path relative to the root (e.g., `work/quantum`). The filesystem IS the database — no SQLite, no cache, no sync issues. Discovery re-runs on every tool call.
 
-### Domain discovery rules
+If the root itself has a `tasks/` directory, it becomes the `_root` domain.
 
-- Root config at `PUNCHLIST_ROOT/.punchlist/config.yaml` provides fallback defaults.
-- Each domain config is merged: `{**root_config, **domain_config}`.
-- Domains nest to arbitrary depth (`work/quantum`, `code/wargame_engine`, etc.).
-- If root itself has a `tasks/` directory, it becomes the `_root` domain.
-- Discovery re-runs on every tool call (just a directory walk — fast).
+## Tools
 
-## Tools Reference
+| Tool | Purpose | Token cost |
+|---|---|---|
+| `punchlist_discover` | List all domains + configs + valid states | Very low |
+| `punchlist_list` | Filtered task metadata only (no body) | Low |
+| `punchlist_get` | Full task with body, notes, log | Medium |
+| `punchlist_search` | Full-text across titles and bodies | Medium |
+| `punchlist_create` | Create task, auto-ID, update domain config | Low |
+| `punchlist_update` | Change state/priority/tags, add notes, auto-log | Low |
+| `punchlist_summary` | Dashboard: counts by state, priority, tags | Medium |
+| `punchlist_cross_domain` | Query across all domains at once | Medium-High |
 
-| Tool | Purpose | Token Cost |
-|------|---------|------------|
-| `punchlist_discover` | List all domains + configs + states | Very low |
-| `punchlist_list` | Filtered task metadata (no body) | Low |
-| `punchlist_get` | Full task with body/notes/log | Medium |
-| `punchlist_search` | Full-text across titles+bodies | Medium |
-| `punchlist_create` | Create task, auto-ID, update config | Low |
-| `punchlist_update` | Change state/priority/tags, add notes | Low |
-| `punchlist_summary` | Dashboard: counts by state/priority/tags | Medium |
-| `punchlist_cross_domain` | Query across all domains | Medium-High |
+Typical LLM flow: `discover` to orient → `summary` for the lay of the land → `list` filtered → `get` to drill in → `update` to record progress.
 
-### Typical AI Workflow
+## Design decisions worth knowing
 
-1. `punchlist_discover` — orient: what domains exist, what states are valid
-2. `punchlist_summary(domain="work/quantum")` — get the lay of the land
-3. `punchlist_list(domain="work/quantum", state="BEGUN")` — what's in flight
-4. `punchlist_get(domain="work/quantum", id=42)` — drill into a specific task
-5. `punchlist_update(domain="work/quantum", id=42, add_note="...")` — update it
+**Go CLI parity.** The MCP matches `pin` behavior exactly: file naming `{padded-id}-{slug-from-title}.md`, slug regex `[^a-z0-9]+` → `-`, title truncated with `...` at `title_max_len`, RFC3339 UTC timestamps, atomic config writes via `.tmp`. Either tool can edit a task; the other reads it identically.
 
-## Key Design Decisions
+**Metadata-first listing.** `punchlist_list` returns frontmatter only. 600 tasks × ~100 bytes ≈ 60 KB instead of ~1.2 MB. `punchlist_get` is on-demand.
 
-### Go CLI Compatibility
+**Auto-logging.** State, priority, and tag changes auto-append to `## Log` with timestamps. Notes go to `## Notes`. `## Log` is always last (matches the Go CLI invariant).
 
-The MCP server matches the Go CLI (`pin`) behavior exactly:
+**State aliases per domain.** Each domain can define its own states with aliases. `resolve_state("confirm")` maps to `FOLLOWUP` if the domain config declares that alias. Validation runs before any write.
 
-- **File naming:** `{id_width-padded}-{slugified-truncated-title}.md`
-- **Slug generation:** `[^a-z0-9]+` → `-`, strip edges (matches Go's `slugifyRegex`)
-- **Title truncation:** Truncated with `...` at `title_max_len` before slugifying
-- **Task ID lookup:** Parse numeric prefix as int (not zero-padded prefix match)
-- **Config write-back:** Preserves field order with `sort_keys=False`, atomic via `.tmp`
-- **Timestamps:** RFC3339 UTC (`2026-01-07T15:29:31Z`)
-- **State timestamps:** `started_at` only for BEGUN, `completed_at` only for DONE
-- **Section handling:** `split_section`/`append_entry`/`join_blocks` match Go exactly
-
-### Flexible States Per Domain
-
-Each domain defines its own states. The MCP supports both config formats:
-
-Simple (just ordering):
-```yaml
-ls_state_order:
-  - BEGUN
-  - TODO
-  - DONE
-```
-
-Rich (with aliases and hotkeys):
-```yaml
-states:
-  - name: TODO
-    aliases: [todo]
-    tui_hotkey: t
-  - name: BEGUN
-    aliases: [begun, STARTED, started]
-    tui_hotkey: b
-```
-
-State validation resolves aliases (e.g., "confirm" → FOLLOWUP, "QA" → TEST).
-
-### Metadata-First Listing
-
-`punchlist_list` returns frontmatter ONLY. This is critical for token efficiency: 600 tasks x ~100 bytes metadata = ~60KB vs 600 tasks x ~2KB full content = ~1.2MB. The AI calls `punchlist_get` only when it needs the full story.
-
-### Auto-Logging
-
-State changes, priority changes, and tag changes automatically append to `## Log` with timestamps. Notes go to `## Notes`. `## Log` is always the last section (matching Go's invariant).
-
-### No Caching
-
-Files are small, the OS filesystem cache is fast, and the data changes outside the MCP (via punchlist CLI, direct editing in nvim/Obsidian). A cache would create stale-data bugs. The server re-discovers domains on every tool call.
-
-## Testing without MCP client
-
-```python
-from pathlib import Path
-from server import PunchlistWorkspace
-
-ws = PunchlistWorkspace(Path("/path/to/workspace"))
-for name, domain in ws.domains.items():
-    print(f"{name}: {len(domain.task_files())} tasks, states={domain.states}")
-```
+**No caching.** Files are small, the OS page cache is fast, and the data changes outside the MCP (via `pin`, nvim, Obsidian). Re-discovery on every call avoids stale-data bugs.
 
 ## Adding a new domain
 
-Create the directory structure — the MCP discovers it automatically:
-
 ```bash
-mkdir -p career/.punchlist career/tasks
-cat > career/.punchlist/config.yaml << 'EOF'
+mkdir -p some/scope/.punchlist some/scope/tasks
+cat > some/scope/.punchlist/config.yaml <<'EOF'
 next_id: 1
 id_width: 3
 ls_state_order:
   - TODO
-  - DOING
+  - BEGUN
   - DONE
 EOF
 ```
+
+No MCP restart needed — discovery runs on every tool call.

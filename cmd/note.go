@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"punchlist/task"
 	"strconv"
 
@@ -22,7 +21,7 @@ func newNoteCmd() *cobra.Command {
 
 			id, err := strconv.Atoi(idStr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Invalid task ID: %v\n", err)
+				failf("Invalid task ID: %v\n", err)
 				return
 			}
 
@@ -31,20 +30,20 @@ func newNoteCmd() *cobra.Command {
 				if printNotPunchlistError(err) {
 					return
 				}
-				fmt.Fprintf(os.Stderr, "Error finding task: %v\n", err)
+				failf("Error finding task: %v\n", err)
 				return
 			}
 
 			t, err := task.Parse(taskPath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error parsing task: %v\n", err)
+				failf("Error parsing task: %v\n", err)
 				return
 			}
 
 			addNote(t, message)
 
 			if err := t.Write(taskPath); err != nil {
-				fmt.Fprintf(os.Stderr, "Error updating task: %v\n", err)
+				failf("Error updating task: %v\n", err)
 				return
 			}
 

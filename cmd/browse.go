@@ -25,11 +25,30 @@ var (
 	contentStyle = lipgloss.NewStyle()
 )
 
+// browseWheelStep is how many content lines one wheel notch scrolls.
+const browseWheelStep = 3
+
+// browseNavKeys are keys the browse TUI claims for navigation and actions.
+// A config state hotkey that collides with one of these is shadowed: nav
+// wins, and the state hotkey is dropped from the live map and help line.
+// (validateHotkey cannot simply reject these — existing configs carry old
+// default hotkeys like l:defer and must keep loading.)
+var browseNavKeys = map[string]struct{}{
+	"h": {}, "j": {}, "k": {}, "l": {},
+	"g": {}, "G": {}, "J": {}, "K": {},
+	"n": {}, "N": {}, "e": {}, "q": {},
+	"/": {}, "tab": {}, "shift+tab": {}, " ": {}, "esc": {},
+	"0": {}, "1": {}, "2": {}, "3": {}, "4": {},
+	"5": {}, "6": {}, "7": {}, "8": {}, "9": {},
+}
+
 type viewMode int
 
 const (
 	modeBrowse viewMode = iota
 	modeNote
+	modeFilter
+	modeNew
 )
 
 type editorFinishedMsg struct {
@@ -37,7 +56,10 @@ type editorFinishedMsg struct {
 }
 
 type model struct {
-	tasks         []*task.Task
+	tasks         []*task.Task // visible tasks (filtered view of allTasks)
+	allTasks      []*task.Task
+	filter        string
+	root          string // project root, for write-locked task creation
 	cursor        int
 	contentScroll int
 	width         int
@@ -49,13 +71,12 @@ type model struct {
 	stateCatalog  *config.StateCatalog
 	stateHotkeys  map[string]string
 	stateHelpLine string
+	pendingG      bool
 }
 
-func initialModel(tasks []*task.Task, catalog *config.StateCatalog) model {
+func initialModel(tasks []*task.Task, catalog *config.StateCatalog, root string) model {
 
 	ti := textinput.New()
-
-	ti.Placeholder = "Your note..."
 
 	ti.CharLimit = 256
 
@@ -65,11 +86,18 @@ func initialModel(tasks []*task.Task, catalog *config.StateCatalog) model {
 	stateHelp := ""
 	if catalog != nil {
 		stateHotkeys = catalog.HotkeyMap()
+		for key := range stateHotkeys {
+			if _, reserved := browseNavKeys[key]; reserved {
+				delete(stateHotkeys, key)
+			}
+		}
 		stateHelp = buildStateHelpLine(catalog)
 	}
 
 	return model{
 		tasks:         tasks,
+		allTasks:      tasks,
+		root:          root,
 		cursor:        0,
 		margin:        browseMargin,
 		mode:          modeBrowse,
@@ -97,28 +125,57 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.contentScroll = m.clampContentScroll(m.contentScroll)
 		return m, nil
 
+	case tea.MouseMsg:
+		if m.mode == modeBrowse && msg.Action == tea.MouseActionPress {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.contentScroll -= browseWheelStep
+				if m.contentScroll < 0 {
+					m.contentScroll = 0
+				}
+			case tea.MouseButtonWheelDown:
+				m.contentScroll = m.clampContentScroll(m.contentScroll + browseWheelStep)
+			}
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		switch m.mode {
 		case modeBrowse:
+			wasPendingG := m.pendingG
+			m.pendingG = false
+			m.err = nil // any keypress dismisses a shown error
 			switch msg.String() {
 			case "ctrl+c", "q":
 				return m, tea.Quit
-			case "left", "k", "K":
+			case "g":
+				if wasPendingG && len(m.tasks) > 0 {
+					m.cursor = 0
+					m.contentScroll = 0
+				} else {
+					m.pendingG = true
+				}
+			case "G":
+				if len(m.tasks) > 0 {
+					m.cursor = len(m.tasks) - 1
+					m.contentScroll = 0
+				}
+			case "left", "h", "K":
 				if m.cursor > 0 {
 					m.cursor--
 					m.contentScroll = 0
 				}
-			case "right", "j", "J", " ":
+			case "right", "l", "J", " ":
 				if m.cursor < len(m.tasks)-1 {
 					m.cursor++
 					m.contentScroll = 0
 				}
-			case "up":
+			case "up", "k":
 				m.contentScroll--
 				if m.contentScroll < 0 {
 					m.contentScroll = 0
 				}
-			case "down":
+			case "down", "j":
 				m.contentScroll++
 				m.contentScroll = m.clampContentScroll(m.contentScroll)
 			case "pgup", "ctrl+u":
@@ -133,8 +190,38 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.contentScroll = 0
 			case "end":
 				m.contentScroll = m.maxContentScroll()
+			case "tab":
+				if len(m.tasks) > 0 {
+					m.cursor = m.nextGroupStart()
+					m.contentScroll = 0
+				}
+			case "shift+tab":
+				if len(m.tasks) > 0 {
+					m.cursor = m.prevGroupStart()
+					m.contentScroll = 0
+				}
+			case "/":
+				m.mode = modeFilter
+				m.textinput.Placeholder = "Filter tasks..."
+				m.textinput.Focus()
+				m.textinput.SetValue(m.filter)
+				return m, textinput.Blink
+			case "esc":
+				if m.filter != "" {
+					m.clearFilter()
+				}
 			case "n":
+				m.mode = modeNew
+				m.textinput.Placeholder = "New task title (pin grammar ok: pri:1 tags:{x})..."
+				m.textinput.Focus()
+				m.textinput.SetValue("")
+				return m, textinput.Blink
+			case "N":
+				if len(m.tasks) == 0 {
+					return m, nil
+				}
 				m.mode = modeNote
+				m.textinput.Placeholder = "Your note..."
 				m.textinput.Focus()
 				m.textinput.SetValue("") // clear previous input
 				return m, textinput.Blink
@@ -158,7 +245,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return editorFinishedMsg{err: err}
 				})
 			default:
-				if stateName, ok := m.stateHotkeys[msg.String()]; ok {
+				key := msg.String()
+				stateName, ok := m.stateHotkeys[key]
+				if !ok {
+					// case-fold: an uppercase letter falls back to its
+					// lowercase state hotkey (F -> followup) unless the
+					// uppercase form is itself bound above (G, J, K, N)
+					if lower := strings.ToLower(key); lower != key {
+						stateName, ok = m.stateHotkeys[lower]
+					}
+				}
+				if ok {
 					return applyStateChange(m, task.State(stateName))
 				}
 			}
@@ -166,12 +263,41 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "enter":
 				noteText := m.textinput.Value()
-				if noteText != "" {
+				if noteText != "" && len(m.tasks) > 0 {
 					currentTask := m.tasks[m.cursor]
-					addNote(currentTask, noteText)
-					if err := currentTask.Write(currentTask.Path); err != nil {
+					if err := mutateBrowseTask(currentTask, func(fresh *task.Task) {
+						addNote(fresh, noteText)
+					}); err != nil {
 						m.err = err
 					}
+				}
+				m.mode = modeBrowse
+				m.textinput.Blur()
+				return m, nil
+			case "esc":
+				m.mode = modeBrowse
+				m.textinput.Blur()
+				return m, nil
+			}
+		case modeFilter:
+			switch msg.String() {
+			case "enter":
+				m.filter = strings.TrimSpace(m.textinput.Value())
+				m.applyFilter()
+				m.mode = modeBrowse
+				m.textinput.Blur()
+				return m, nil
+			case "esc":
+				m.mode = modeBrowse
+				m.textinput.Blur()
+				return m, nil
+			}
+		case modeNew:
+			switch msg.String() {
+			case "enter":
+				title := strings.TrimSpace(m.textinput.Value())
+				if title != "" {
+					m.createBrowseTask(title)
 				}
 				m.mode = modeBrowse
 				m.textinput.Blur()
@@ -193,6 +319,146 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// applyFilter narrows the visible task list to case-insensitive substring
+// matches of the filter over title, state, tags, and body.
+func (m *model) applyFilter() {
+	if m.filter == "" {
+		m.clearFilter()
+		return
+	}
+	query := strings.ToLower(m.filter)
+	filtered := make([]*task.Task, 0, len(m.allTasks))
+	for _, t := range m.allTasks {
+		haystack := strings.ToLower(strings.Join([]string{
+			t.Title,
+			string(t.State),
+			strings.Join(t.Tags, " "),
+			t.Body,
+		}, "\n"))
+		if strings.Contains(haystack, query) {
+			filtered = append(filtered, t)
+		}
+	}
+	m.tasks = filtered
+	m.cursor = 0
+	m.contentScroll = 0
+}
+
+func (m *model) clearFilter() {
+	m.filter = ""
+	m.tasks = m.allTasks
+	m.cursor = 0
+	m.contentScroll = 0
+}
+
+// groupStartAt walks back to the first task sharing index i's canonical state.
+func (m model) groupStartAt(i int) int {
+	key := canonicalizeState(m.stateCatalog, m.tasks[i].State)
+	for i > 0 && canonicalizeState(m.stateCatalog, m.tasks[i-1].State) == key {
+		i--
+	}
+	return i
+}
+
+// nextGroupStart returns the first task of the next state group after the
+// cursor, wrapping to the first task.
+func (m model) nextGroupStart() int {
+	key := canonicalizeState(m.stateCatalog, m.tasks[m.cursor].State)
+	for i := m.cursor + 1; i < len(m.tasks); i++ {
+		if canonicalizeState(m.stateCatalog, m.tasks[i].State) != key {
+			return i
+		}
+	}
+	return 0
+}
+
+// prevGroupStart returns the head of the current state group, or — when
+// already at a group head — the head of the previous group, wrapping.
+func (m model) prevGroupStart() int {
+	start := m.groupStartAt(m.cursor)
+	if start < m.cursor {
+		return start
+	}
+	prev := start - 1
+	if prev < 0 {
+		prev = len(m.tasks) - 1
+	}
+	return m.groupStartAt(prev)
+}
+
+// createBrowseTask creates a task in the browse scope via the same core the
+// CLI uses (under the project write lock), clears any filter, and moves the
+// cursor to it. The input accepts the full pin creation grammar.
+func (m *model) createBrowseTask(input string) {
+	if m.root == "" {
+		m.err = fmt.Errorf("cannot create task: unknown project root")
+		return
+	}
+	var created *task.Task
+	err := withProjectWriteLock(m.root, func() error {
+		t, err := createTaskInCwd(m.browseCreateArgs(input), false)
+		if err != nil {
+			return err
+		}
+		created = t
+		return nil
+	})
+	if err != nil {
+		m.err = err
+		return
+	}
+	m.allTasks = append(m.allTasks, created)
+	sortBrowseTasks(m.allTasks, m.stateCatalog)
+	m.clearFilter()
+	for i, t := range m.tasks {
+		if t == created {
+			m.cursor = i
+			break
+		}
+	}
+}
+
+// browseCreateArgs tokenizes free-form input from the new-task prompt into
+// CLI-shaped args: an optional leading state token, inline modifiers
+// (pri:2, tags:{x}, by:friday) pulled out, and every remaining word joined
+// into a single title arg (the CLI requires the title as one argument).
+func (m model) browseCreateArgs(input string) []string {
+	fields := strings.Fields(input)
+	out := []string{}
+	start := 0
+	if len(fields) > 1 && m.stateCatalog != nil {
+		if _, ok := m.stateCatalog.Resolve(fields[0]); ok {
+			out = append(out, fields[0])
+			start = 1
+		}
+	}
+	titleParts := []string{}
+	mods := []string{}
+	for _, field := range fields[start:] {
+		if _, _, ok, inline := parseModifierToken(field); ok && inline {
+			mods = append(mods, field)
+			continue
+		}
+		titleParts = append(titleParts, field)
+	}
+	out = append(out, strings.Join(titleParts, " "))
+	return append(out, mods...)
+}
+
+func sortBrowseTasks(tasks []*task.Task, catalog *config.StateCatalog) {
+	orderIndex := buildStateOrderIndex(catalog, tasks)
+	sort.Slice(tasks, func(i, j int) bool {
+		stateA := canonicalizeState(catalog, tasks[i].State)
+		stateB := canonicalizeState(catalog, tasks[j].State)
+		ai, _ := orderIndexForState(orderIndex, stateA)
+		aj, _ := orderIndexForState(orderIndex, stateB)
+		if ai == aj {
+			return tasks[i].ID < tasks[j].ID
+		}
+		return ai < aj
+	})
+}
+
 func (m model) clampContentScroll(scroll int) int {
 	if scroll < 0 {
 		return 0
@@ -211,7 +477,7 @@ func (m model) maxContentScroll() int {
 	currentTask := m.tasks[m.cursor]
 	contentWidth := browseContentWidth(m.width, m.margin)
 	mainContent := renderBrowseContent(currentTask, contentWidth, m.stateCatalog)
-	helpHeight := lipgloss.Height(m.browseHelpText())
+	helpHeight := lipgloss.Height(m.wrapHelp(m.browseHelpText()))
 	fullContentHeight := lipgloss.Height(mainContent)
 	topPad := browseTopPadding(m.height, fullContentHeight, helpHeight)
 	viewportHeight := m.height - topPad - helpHeight
@@ -229,10 +495,11 @@ func applyStateChange(m model, newState task.State) (model, tea.Cmd) {
 	currentTask := m.tasks[m.cursor]
 	oldState := currentTask.State
 	if oldState != newState {
-		changeState(currentTask, newState)
-		logMsg := fmt.Sprintf("State changed from %s to %s", oldState, newState)
-		addLog(currentTask, logMsg)
-		if err := currentTask.Write(currentTask.Path); err != nil {
+		if err := mutateBrowseTask(currentTask, func(fresh *task.Task) {
+			previous := fresh.State
+			changeState(fresh, newState)
+			addLog(fresh, fmt.Sprintf("State changed from %s to %s", previous, newState))
+		}); err != nil {
 			m.err = err
 		}
 	}
@@ -254,15 +521,36 @@ func applyPriorityChange(m model, key string) (model, tea.Cmd) {
 	currentTask := m.tasks[m.cursor]
 	oldPriority := currentTask.Priority
 	if oldPriority != newPriority {
-		currentTask.Priority = newPriority
-		currentTask.UpdatedAt = time.Now()
-		logMsg := fmt.Sprintf("Priority changed from %d to %d", oldPriority, newPriority)
-		addLog(currentTask, logMsg)
-		if err := currentTask.Write(currentTask.Path); err != nil {
+		if err := mutateBrowseTask(currentTask, func(fresh *task.Task) {
+			previous := fresh.Priority
+			fresh.Priority = newPriority
+			fresh.UpdatedAt = time.Now()
+			addLog(fresh, fmt.Sprintf("Priority changed from %d to %d", previous, newPriority))
+		}); err != nil {
 			m.err = err
 		}
 	}
 	return m, nil
+}
+
+func mutateBrowseTask(current *task.Task, mutate func(*task.Task)) error {
+	root := filepath.Dir(filepath.Dir(current.Path))
+	write := func() error {
+		fresh, err := task.Parse(current.Path)
+		if err != nil {
+			return err
+		}
+		mutate(fresh)
+		if err := fresh.Write(fresh.Path); err != nil {
+			return err
+		}
+		*current = *fresh
+		return nil
+	}
+	if info, err := os.Stat(filepath.Join(root, config.PunchlistDir)); err != nil || !info.IsDir() {
+		return write() // standalone task fixture/file, outside a Punchlist scope
+	}
+	return withProjectWriteLock(root, write)
 }
 
 func parsePriorityKey(key string) (int, bool) {
@@ -392,7 +680,14 @@ func browseSummaryLine(t *task.Task, idWidth, contentWidth, titleMaxLen int, cat
 
 func (m model) View() string {
 	if len(m.tasks) == 0 {
-		return applyLeftMargin("No tasks to display.", m.margin)
+		message := "No tasks to display."
+		if m.filter != "" {
+			message = fmt.Sprintf("No tasks match filter %q — esc to clear, / to edit.", m.filter)
+		}
+		if m.mode == modeFilter {
+			message += "\n\nenter: apply filter  esc: cancel\n" + m.textinput.View()
+		}
+		return applyLeftMargin(message, m.margin)
 	}
 	if m.width == 0 {
 		return "..."
@@ -409,6 +704,10 @@ func (m model) View() string {
 	switch m.mode {
 	case modeNote:
 		help = "enter: save note  esc: cancel\n" + m.textinput.View()
+	case modeFilter:
+		help = "enter: apply filter  esc: cancel\n" + m.textinput.View()
+	case modeNew:
+		help = "enter: create task  esc: cancel\n" + m.textinput.View()
 	default: // modeBrowse
 		help = m.browseHelpText()
 	}
@@ -425,6 +724,8 @@ func (m model) View() string {
 			mainContent,
 		)
 	}
+
+	help = m.wrapHelp(help)
 
 	helpHeight := lipgloss.Height(help)
 	fullContentHeight := lipgloss.Height(mainContent)
@@ -455,21 +756,39 @@ func (m model) View() string {
 	return applyLeftMargin(view, m.margin)
 }
 
+// wrapHelp wraps footer text to the content width so its logical line count
+// matches the terminal rows it occupies — an overflowing View makes bubbletea
+// silently drop lines from the top of the screen.
+func (m model) wrapHelp(help string) string {
+	if browsePlainEnabled() || browseNoWrapEnabled() {
+		return help
+	}
+	return wrapBrowseText(help, browseContentWidth(m.width, m.margin))
+}
+
 func (m model) browseHelpText() string {
 	stateHelp := ""
 	if m.stateHelpLine != "" {
 		stateHelp = m.stateHelpLine + "  "
 	}
-	return "←/K: prev  →/J/space: next  ↑/↓: scroll  pgup/pgdn: page\n" +
+	filterHint := ""
+	if m.err != nil {
+		filterHint += fmt.Sprintf("error: %v\n", m.err)
+	}
+	if m.filter != "" {
+		filterHint += fmt.Sprintf("filter:%q  esc:clear\n", m.filter)
+	}
+	return filterHint +
+		"h/l: prev/next task  j/k: scroll  tab: next group  /: filter\n" +
 		stateHelp +
-		"n:note  e:edit  1-0:pri  q:quit"
+		"n:new  N:note  e:edit  1-0:pri  q:quit"
 }
 
 func newBrowseCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "browse [state]",
 		Short:             "Browse tasks in an interactive viewer",
-		Long:              "Browse tasks one by one in an interactive full-screen viewer. Keys: \u2190/\u2192 to move, state hotkeys to update state and advance, n to add a note, e to edit, q to quit.",
+		Long:              "Browse tasks one by one in an interactive full-screen viewer. Keys: h/l (or \u2190/\u2192) to move between tasks, j/k (or \u2191/\u2193) to scroll, tab/shift+tab to jump between state groups, gg/G to jump to first/last task, / to filter, state hotkeys to update state and advance, n to create a task, N to add a note, e to edit, q to quit.",
 		ValidArgsFunction: stateArgCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			stateCatalog, err := loadStateCatalog()
@@ -521,17 +840,7 @@ func newBrowseCmd() *cobra.Command {
 				return fmt.Errorf("error listing tasks: %w", err)
 			}
 
-			orderIndex := buildStateOrderIndex(stateCatalog, allTasks)
-			sort.Slice(allTasks, func(i, j int) bool {
-				stateA := canonicalizeState(stateCatalog, allTasks[i].State)
-				stateB := canonicalizeState(stateCatalog, allTasks[j].State)
-				ai, _ := orderIndexForState(orderIndex, stateA)
-				aj, _ := orderIndexForState(orderIndex, stateB)
-				if ai == aj {
-					return allTasks[i].ID < allTasks[j].ID
-				}
-				return ai < aj
-			})
+			sortBrowseTasks(allTasks, stateCatalog)
 			if browseNoTuiEnabled() {
 				if len(allTasks) == 0 {
 					fmt.Println("No tasks found.")
@@ -541,7 +850,7 @@ func newBrowseCmd() *cobra.Command {
 				fmt.Println(renderBrowseContent(allTasks[0], contentWidth, stateCatalog))
 				return nil
 			}
-			p := tea.NewProgram(initialModel(allTasks, stateCatalog), tea.WithAltScreen())
+			p := tea.NewProgram(initialModel(allTasks, stateCatalog, filepath.Dir(tasksPath)), tea.WithAltScreen(), tea.WithMouseCellMotion())
 			if _, err := p.Run(); err != nil {
 				return fmt.Errorf("error running browse program: %w", err)
 			}
@@ -679,7 +988,7 @@ func renderBrowseContent(t *task.Task, width int, catalog *config.StateCatalog) 
 	if width <= 0 {
 		return truncateBrowseBlock(block)
 	}
-	if browsePlainEnabled() || browseNoWrapEnabled() || len(block) > browseWrapLimit() {
+	if browsePlainEnabled() || browseNoWrapEnabled() {
 		return truncateBrowseBlock(block)
 	}
 	return wrapBrowseText(truncateBrowseBlock(block), width)
@@ -709,10 +1018,6 @@ func wrapBrowseText(text string, width int) string {
 	return style.Render(text)
 }
 
-func browseWrapLimit() int {
-	return 20000
-}
-
 func browseMaxContentLen() int {
 	return 12000
 }
@@ -724,11 +1029,15 @@ func buildStateHelpLine(catalog *config.StateCatalog) string {
 	ordered := catalog.SortStates()
 	parts := []string{}
 	for _, st := range ordered {
-		if strings.TrimSpace(st.TuiHotkey) == "" {
+		hotkey := strings.TrimSpace(st.TuiHotkey)
+		if hotkey == "" {
 			continue
 		}
+		if _, reserved := browseNavKeys[hotkey]; reserved {
+			continue // shadowed by a browse nav key; unreachable, keep help honest
+		}
 		label := strings.ToLower(st.Name)
-		parts = append(parts, fmt.Sprintf("%s:%s", st.TuiHotkey, label))
+		parts = append(parts, fmt.Sprintf("%s:%s", hotkey, label))
 	}
 	return strings.Join(parts, "  ")
 }

@@ -34,6 +34,11 @@ func DefaultStates() []StateConfig {
 		{
 			Name:      "BEGUN",
 			Aliases:   []string{"begun", "STARTED", "started", "INPROGRESS", "inprogress"},
+			TuiHotkey: "s",
+		},
+		{
+			Name:      "BLOCKED",
+			Aliases:   []string{"blocked", "BLOCK", "block"},
 			TuiHotkey: "b",
 		},
 		{
@@ -44,7 +49,7 @@ func DefaultStates() []StateConfig {
 		{
 			Name:      "DEFER",
 			Aliases:   []string{"defer"},
-			TuiHotkey: "l",
+			TuiHotkey: "z",
 		},
 		{
 			Name:      "NOTDO",
@@ -248,6 +253,12 @@ func validateStateToken(token string) error {
 	return nil
 }
 
+// reservedHotkeys blocks NEW configs from claiming browse navigation keys.
+// Deliberately narrower than the full browse nav set (h/l/g///tab were added
+// to nav later): widening it would hard-fail catalog loading for existing
+// configs that carry the old default hotkeys (e.g. l:defer). Legacy
+// collisions are instead shadowed at browse time — nav wins, the state
+// hotkey is dropped from the map and help line.
 var reservedHotkeys = func() map[string]struct{} {
 	keys := []string{
 		"n", "q", "j", "k", "J", "K", " ", "e",

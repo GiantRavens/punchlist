@@ -18,7 +18,7 @@ func newInitCmd() *cobra.Command {
 			// resolve working directory for project setup
 			cwd, err := os.Getwd()
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error getting current directory: %v\n", err)
+				failf("Error getting current directory: %v\n", err)
 				return
 			}
 
@@ -31,7 +31,7 @@ func newInitCmd() *cobra.Command {
 
 			// create the config directory
 			if err := os.MkdirAll(punchlistPath, 0755); err != nil {
-				fmt.Fprintf(os.Stderr, "Error creating .punchlist directory: %v\n", err)
+				failf("Error creating .punchlist directory: %v\n", err)
 				return
 			}
 
@@ -39,15 +39,15 @@ func newInitCmd() *cobra.Command {
 			tasksPath := filepath.Join(cwd, "tasks")
 			if info, err := os.Stat(tasksPath); err == nil {
 				if !info.IsDir() {
-					fmt.Fprintln(os.Stderr, "Error: tasks exists and is not a directory.")
+					failf("Error: tasks exists and is not a directory.\n")
 					return
 				}
 				fmt.Fprintln(os.Stderr, "Warning: tasks directory already exists; leaving it untouched.")
 			} else if !os.IsNotExist(err) {
-				fmt.Fprintf(os.Stderr, "Error checking tasks directory: %v\n", err)
+				failf("Error checking tasks directory: %v\n", err)
 				return
 			} else if err := os.MkdirAll(tasksPath, 0755); err != nil {
-				fmt.Fprintf(os.Stderr, "Error creating tasks directory: %v\n", err)
+				failf("Error creating tasks directory: %v\n", err)
 				return
 			}
 
@@ -66,7 +66,7 @@ func newInitCmd() *cobra.Command {
 				LsTitleMaxLen:   config.DefaultLsTitleMaxLen(),
 			}
 			if err := config.SaveConfig(defaultConfig); err != nil {
-				fmt.Fprintf(os.Stderr, "Error creating default config: %v\n", err)
+				failf("Error creating default config: %v\n", err)
 				return
 			}
 

@@ -155,3 +155,124 @@ func TestAcceptanceCmdIntegration(t *testing.T) {
 		}
 	})
 }
+
+func TestAddAcceptanceItem(t *testing.T) {
+	t.Run("appends to existing section", func(t *testing.T) {
+		body := "# Task\n\n## Acceptance\n\n- [ ] First\n\n## Notes\n\n- a note"
+		newBody := addAcceptanceItem(body, "Second")
+		items := parseAcceptance(newBody)
+		if len(items) != 2 || items[1].Text != "Second" || items[1].Checked {
+			t.Fatalf("expected appended unchecked item, got %+v", items)
+		}
+		if !strings.Contains(newBody, "## Notes") || !strings.Contains(newBody, "- a note") {
+			t.Errorf("notes section damaged: %s", newBody)
+		}
+	})
+
+	t.Run("creates section before notes and log", func(t *testing.T) {
+		body := "# Task\n\n## Notes\n\n- a note\n\n## Log\n\n- created"
+		newBody := addAcceptanceItem(body, "Only criterion")
+		items := parseAcceptance(newBody)
+		if len(items) != 1 || items[0].Text != "Only criterion" {
+			t.Fatalf("expected one item, got %+v", items)
+		}
+		accIdx := strings.Index(newBody, "## Acceptance")
+		notesIdx := strings.Index(newBody, "## Notes")
+		logIdx := strings.Index(newBody, "## Log")
+		if !(accIdx < notesIdx && notesIdx < logIdx) {
+			t.Errorf("section order wrong (acc=%d notes=%d log=%d):\n%s", accIdx, notesIdx, logIdx, newBody)
+		}
+	})
+
+	t.Run("creates section on bare body", func(t *testing.T) {
+		newBody := addAcceptanceItem("# Task", "Criterion")
+		items := parseAcceptance(newBody)
+		if len(items) != 1 {
+			t.Fatalf("expected one item, got %+v", items)
+		}
+	})
+}
+
+func TestRemoveAcceptanceItem(t *testing.T) {
+	body := "# Task\n\n## Acceptance\n\n- [ ] First\n- [x] Second\n- [ ] Third\n\n## Notes\n"
+
+	t.Run("removes by index", func(t *testing.T) {
+		newBody, removedText, err := removeAcceptanceItem(body, 2)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if removedText != "Second" {
+			t.Errorf("expected removed text 'Second', got %q", removedText)
+		}
+		items := parseAcceptance(newBody)
+		if len(items) != 2 || items[0].Text != "First" || items[1].Text != "Third" {
+			t.Errorf("unexpected remaining items: %+v", items)
+		}
+	})
+
+	t.Run("index out of range", func(t *testing.T) {
+		if _, _, err := removeAcceptanceItem(body, 9); err == nil {
+			t.Error("expected error for out-of-range index")
+		}
+	})
+
+	t.Run("no section", func(t *testing.T) {
+		if _, _, err := removeAcceptanceItem("# Bare", 1); err == nil {
+			t.Error("expected error for missing section")
+		}
+	})
+}
+
+func TestAcceptanceAddRmCmdIntegration(t *testing.T) {
+	teardown := setupTest(t)
+	defer teardown()
+	executeCommand("init")
+	executeCommand("todo", "AC add task")
+
+	output, err := executeCommand("acceptance", "add", "1", "First criterion")
+	if err != nil {
+		t.Fatalf("acceptance add failed: %v", err)
+	}
+	if !strings.Contains(output, "Added acceptance criterion 1 to task 1") {
+		t.Errorf("unexpected add output: %s", output)
+	}
+	executeCommand("acceptance", "add", "1", "Second criterion")
+
+	taskPath, _ := findTaskFile(1)
+	tsk, _ := task.Parse(taskPath)
+	items := parseAcceptance(tsk.Body)
+	if len(items) != 2 || items[0].Text != "First criterion" || items[1].Text != "Second criterion" {
+		t.Fatalf("expected 2 persisted criteria, got %+v", items)
+	}
+
+	// check interoperates with added criteria
+	if _, err := executeCommand("check", "1", "2"); err != nil {
+		t.Fatalf("check failed on added criterion: %v", err)
+	}
+	tsk, _ = task.Parse(taskPath)
+	if items := parseAcceptance(tsk.Body); !items[1].Checked {
+		t.Error("expected second criterion checked")
+	}
+
+	output, err = executeCommand("acceptance", "rm", "1", "1")
+	if err != nil {
+		t.Fatalf("acceptance rm failed: %v", err)
+	}
+	if !strings.Contains(output, "Removed acceptance criterion 1 from task 1: First criterion") {
+		t.Errorf("unexpected rm output: %s", output)
+	}
+	tsk, _ = task.Parse(taskPath)
+	items = parseAcceptance(tsk.Body)
+	if len(items) != 1 || items[0].Text != "Second criterion" {
+		t.Errorf("expected only second criterion to remain, got %+v", items)
+	}
+
+	// bare listing still works with subcommands present
+	output, err = executeCommand("acceptance", "1")
+	if err != nil {
+		t.Fatalf("acceptance list failed: %v", err)
+	}
+	if !strings.Contains(output, "1. [x] Second criterion") {
+		t.Errorf("unexpected list output: %s", output)
+	}
+}

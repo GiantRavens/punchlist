@@ -26,6 +26,13 @@ type Config struct {
 	BrowseMargin    int           `yaml:"browse_margin,omitempty"`
 	TitleMaxLen     int           `yaml:"title_max_len,omitempty"`
 	LsTitleMaxLen   int           `yaml:"ls_title_max_len,omitempty"`
+	Accepting       *bool         `yaml:"accepting,omitempty"`
+}
+
+// whether this scope accepts new tasks (default true; set accepting: false
+// in config.yaml to close a scope to new tasks while ls/done/note keep working)
+func (c *Config) IsAccepting() bool {
+	return c == nil || c.Accepting == nil || *c.Accepting
 }
 
 // default id width for filename padding
@@ -35,7 +42,7 @@ func DefaultIDWidth() int {
 
 // default state order for ls
 func DefaultLsStateOrder() []string {
-	return []string{"TODO", "BEGUN", "FOLLOWUP", "DEFER", "NOTDO", "DONE"}
+	return []string{"TODO", "BEGUN", "BLOCKED", "FOLLOWUP", "DEFER", "NOTDO", "DONE"}
 }
 
 // default editor insert-mode behavior for vim-style editors
@@ -90,6 +97,43 @@ func FindPunchlistRoot() (string, error) {
 	return filepath.Dir(punchlistPath), nil
 }
 
+// resolve the punchlist root that should receive a new task, starting at
+// startDir. The scope at startDir itself must exist (creation never walks up
+// on its own); only a scope marked accepting: false is skipped, with the walk
+// continuing up the directory tree until an accepting scope is found.
+// Returns the accepting root and the closed roots skipped along the way.
+func FindAcceptingRootFrom(startDir string) (string, []string, error) {
+	dir, err := filepath.Abs(startDir)
+	if err != nil {
+		return "", nil, fmt.Errorf("could not resolve path: %w", err)
+	}
+	startAbs := dir
+
+	var skipped []string
+	for {
+		punchlistPath, findErr := findPunchlistDir(dir)
+		if findErr == nil {
+			cfg, cfgErr := loadConfigAt(punchlistPath)
+			if cfgErr != nil {
+				return "", skipped, cfgErr
+			}
+			if cfg.IsAccepting() {
+				return dir, skipped, nil
+			}
+			skipped = append(skipped, dir)
+		} else if dir == startAbs {
+			// the nearest scope must exist at the starting directory itself
+			return "", nil, findErr
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", skipped, fmt.Errorf("punchlist scope at %s is closed to new tasks (accepting: false) and no accepting parent scope was found", skipped[0])
+		}
+		dir = parent
+	}
+}
+
 // load config from the nearest punchlist directory
 func LoadConfig() (*Config, error) {
 	cwd, err := os.Getwd()
@@ -102,6 +146,11 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
+	return loadConfigAt(punchlistPath)
+}
+
+// load config from an explicit punchlist directory
+func loadConfigAt(punchlistPath string) (*Config, error) {
 	configPath := filepath.Join(punchlistPath, "config.yaml")
 	f, err := os.Open(configPath)
 	if err != nil {

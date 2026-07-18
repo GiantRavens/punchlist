@@ -97,6 +97,7 @@ pin, punchlist
 | `meta` | View or set metadata on a task |
 | `notdo` | Mark a task as not to do |
 | `note` | Add a note to a task |
+| `pri` | Set or clear the priority on one or more tasks (0 clears) |
 | `search` | Search tasks by text |
 | `show` | Show a task in detail |
 | `start` | Start a task |

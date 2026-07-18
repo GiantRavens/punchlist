@@ -21,27 +21,102 @@ type createOptions struct {
 	depends  []int
 }
 
+// ticketScaffold seeds the body of a --ticket task with the three
+// sections a substantive pin needs: what's wrong (Problem), how it gets
+// fixed (Approach), and a testable post-condition proving it durably
+// landed (Acceptance). The single unchecked criterion is parseAcceptance-
+// compatible so `pin acceptance`/`pin check` work immediately. ## Log is
+// appended by the normal addLog path, and `pin note` creates ## Notes on
+// demand — both land after these sections. (pin #17, decision-0100.)
+const ticketScaffold = `## Problem
+
+(what's wrong + root cause + evidence — fill me in)
+
+## Approach
+
+(the fix — fill me in)
+
+## Acceptance
+
+- [ ] (testable post-condition that proves the fix durably landed — fill me in)`
+
+// stripTicketFlag pulls the --ticket boolean out of a free-form arg list,
+// returning the remaining args and whether the flag was present. State-
+// creation commands set DisableFlagParsing, so the flag arrives as a plain
+// token rather than being parsed by cobra; handling it here means --ticket
+// composes with every create path (todo/begun/done and implicit creation)
+// and with the existing pri/tags/due/state modifiers.
+func stripTicketFlag(args []string) ([]string, bool) {
+	ticket := false
+	out := args[:0:0]
+	for _, a := range args {
+		if a == "--ticket" {
+			ticket = true
+			continue
+		}
+		out = append(out, a)
+	}
+	return out, ticket
+}
+
 // create a task from free-form args
 func createTaskFromArgs(args []string) error {
+	args, ticket := stripTicketFlag(args)
 	targetPath, remaining := extractTargetPath(args)
 	if len(remaining) == 0 {
 		return fmt.Errorf("missing title")
 	}
+
+	startDir := ""
 	if targetPath == "" {
-		return createTaskFromArgsInDir(remaining)
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("could not get current working directory: %w", err)
+		}
+		startDir = cwd
+	} else {
+		root, err := punchlistRootFromPath(targetPath)
+		if err != nil {
+			return err
+		}
+		startDir = root
 	}
-	root, err := punchlistRootFromPath(targetPath)
+
+	// scopes marked accepting: false are closed to new tasks; walk up to
+	// the nearest accepting ancestor scope instead (pin #12)
+	root, skipped, err := config.FindAcceptingRootFrom(startDir)
 	if err != nil {
 		return err
 	}
-	return withWorkingDir(root, func() error {
-		return createTaskFromArgsInDir(remaining)
+	for _, closed := range skipped {
+		fmt.Printf("Scope %s is closed to new tasks (accepting: false); walking up.\n", closed)
+	}
+
+	return withProjectWriteLock(root, func() error {
+		if targetPath == "" && len(skipped) == 0 {
+			return createTaskFromArgsInDir(remaining, ticket)
+		}
+		return withWorkingDir(root, func() error {
+			return createTaskFromArgsInDir(remaining, ticket)
+		})
 	})
 }
 
-func createTaskFromArgsInDir(args []string) error {
+func createTaskFromArgsInDir(args []string, ticket bool) error {
+	newTask, err := createTaskInCwd(args, ticket)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Created task %d: %s\n", newTask.ID, newTask.Path)
+	return nil
+}
+
+// createTaskInCwd is the print-free creation core shared by the CLI and the
+// browse TUI (which cannot write to stdout mid-render). Callers must already
+// hold the project write lock.
+func createTaskInCwd(args []string, ticket bool) (*task.Task, error) {
 	if len(args) == 0 {
-		return fmt.Errorf("missing title")
+		return nil, fmt.Errorf("missing title")
 	}
 
 	var (
@@ -51,11 +126,11 @@ func createTaskFromArgsInDir(args []string) error {
 
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		return fmt.Errorf("error loading config: %w", err)
+		return nil, fmt.Errorf("error loading config: %w", err)
 	}
 	stateCatalog, err := config.BuildStateCatalog(cfg)
 	if err != nil {
-		return fmt.Errorf("error loading state config: %w", err)
+		return nil, fmt.Errorf("error loading state config: %w", err)
 	}
 
 	// parse optional leading state
@@ -72,13 +147,13 @@ func createTaskFromArgsInDir(args []string) error {
 	// split title from modifiers
 	title, mods, err := splitTitleAndModifiers(args)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// parse modifiers into options
 	opts, err := parseCreateModifiers(mods)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if strings.TrimSpace(opts.state) != "" {
@@ -96,10 +171,10 @@ func createTaskFromArgsInDir(args []string) error {
 
 	tasksPath, err := tasksDir()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := os.MkdirAll(tasksPath, 0755); err != nil {
-		return fmt.Errorf("error creating tasks directory: %w", err)
+		return nil, fmt.Errorf("error creating tasks directory: %w", err)
 	}
 	filePath := filepath.Join(tasksPath, filename)
 
@@ -114,24 +189,27 @@ func createTaskFromArgsInDir(args []string) error {
 		UpdatedAt: time.Now(),
 		Due:       opts.due,
 		DependsOn: opts.depends,
+		Path:      filePath,
 	}
-	// use a default h1 body
-	newTask.Body = fmt.Sprintf("# %s\n", fullTitle)
+	// use a default h1 body; --ticket seeds the Problem/Approach/Acceptance scaffold
+	if ticket {
+		newTask.Body = fmt.Sprintf("# %s\n\n%s\n", fullTitle, ticketScaffold)
+	} else {
+		newTask.Body = fmt.Sprintf("# %s\n", fullTitle)
+	}
 	addLog(newTask, "Created task")
 
 	if err := newTask.Write(filePath); err != nil {
-		return fmt.Errorf("error writing task file: %w", err)
+		return nil, fmt.Errorf("error writing task file: %w", err)
 	}
-
-	fmt.Printf("Created task %d: %s\n", id, filePath)
 
 	// increment and save the next id
 	cfg.NextID++
 	if err := config.SaveConfig(cfg); err != nil {
-		return fmt.Errorf("error saving config: %w", err)
+		return nil, fmt.Errorf("error saving config: %w", err)
 	}
 
-	return nil
+	return newTask, nil
 }
 
 // choose a safe id width from config or defaults

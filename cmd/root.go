@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"punchlist/config"
 	"punchlist/task"
 )
 
@@ -75,6 +76,8 @@ Zsh cwd hook snippet (optional, for prompt or env):
 		Version:           Version,
 	}
 	cmd.SetVersionTemplate("pin {{.Version}}\n")
+	cmd.PersistentPreRunE = acquireCommandWriteLock
+	cmd.PersistentPostRun = releaseCommandWriteLock
 
 	cmd.AddCommand(newBlockCmd())
 	cmd.AddCommand(newBrowseCmd())
@@ -82,6 +85,8 @@ Zsh cwd hook snippet (optional, for prompt or env):
 	cmd.AddCommand(newConfirmCmd())
 	cmd.AddCommand(newConfigCmd())
 	cmd.AddCommand(newDeleteCmd())
+	cmd.AddCommand(newDoctorCmd())
+	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newDeferCmd())
 	cmd.AddCommand(newDoneCmd())
 	cmd.AddCommand(newDueCmd())
@@ -89,6 +94,7 @@ Zsh cwd hook snippet (optional, for prompt or env):
 	cmd.AddCommand(newInitCmd())
 	cmd.AddCommand(newLsCmd())
 	cmd.AddCommand(newNoteCmd())
+	cmd.AddCommand(newPriCmd())
 	cmd.AddCommand(newSearchCmd())
 	cmd.AddCommand(newShowCmd())
 	cmd.AddCommand(newStartCmd())
@@ -120,7 +126,19 @@ func Execute() {
 					os.Exit(1)
 				}
 				newState := task.State(stateCatalog.Canonicalize(args[0]))
-				updateTaskState(ids, newState)
+				rootDir, err := config.FindPunchlistRoot()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error resolving punchlist scope: %v\n", err)
+					os.Exit(1)
+				}
+				if err := withProjectWriteLock(rootDir, func() error {
+					updateTaskState(ids, newState)
+					return nil
+				}); err != nil {
+					fmt.Fprintf(os.Stderr, "Error updating tasks: %v\n", err)
+					os.Exit(1)
+				}
+				exitIfFailed()
 				return
 			}
 		}
@@ -132,6 +150,7 @@ func Execute() {
 			fmt.Fprintf(os.Stderr, "Whoops. There was an error while executing your CLI '%s'", err)
 			os.Exit(1)
 		}
+		exitIfFailed()
 		return
 	}
 
@@ -143,6 +162,10 @@ func Execute() {
 		fmt.Fprintf(os.Stderr, "Whoops. There was an error while executing your CLI '%s'", err)
 		os.Exit(1)
 	}
+	// error paths inside Run funcs record failure via failf instead of
+	// exiting mid-command (the write lock releases in PersistentPostRun);
+	// honor that recorded status now that post-run has completed.
+	exitIfFailed()
 }
 
 // check if a token matches a subcommand name or alias

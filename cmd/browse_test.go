@@ -207,3 +207,97 @@ func TestBrowseViewScrollsLongTaskBody(t *testing.T) {
 		t.Fatalf("expected fixed footer to remain visible after scroll, got:\n%s", view)
 	}
 }
+
+func makeBrowseModelWithTasks(n int) model {
+	now := time.Date(2026, 1, 29, 12, 0, 0, 0, time.UTC)
+	tasks := make([]*task.Task, n)
+	for i := 0; i < n; i++ {
+		tasks[i] = &task.Task{
+			ID:        i + 1,
+			Title:     "task " + strconv.Itoa(i+1),
+			State:     task.StateTodo,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+	}
+	return model{
+		tasks:  tasks,
+		cursor: 0,
+		width:  100,
+		height: 24,
+		margin: 0,
+		mode:   modeBrowse,
+	}
+}
+
+func sendRune(m model, r rune) model {
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	return updated.(model)
+}
+
+func TestBrowseGCapitalJumpsToLastTask(t *testing.T) {
+	m := makeBrowseModelWithTasks(5)
+	m.cursor = 1
+	m.contentScroll = 7
+
+	updated := sendRune(m, 'G')
+
+	if updated.cursor != 4 {
+		t.Fatalf("expected cursor at last task (4), got %d", updated.cursor)
+	}
+	if updated.contentScroll != 0 {
+		t.Fatalf("expected contentScroll reset to 0, got %d", updated.contentScroll)
+	}
+}
+
+func TestBrowseDoubleGJumpsToFirstTask(t *testing.T) {
+	m := makeBrowseModelWithTasks(5)
+	m.cursor = 3
+	m.contentScroll = 4
+
+	afterFirstG := sendRune(m, 'g')
+	if !afterFirstG.pendingG {
+		t.Fatalf("expected pendingG=true after single g, got false")
+	}
+	if afterFirstG.cursor != 3 {
+		t.Fatalf("expected cursor unchanged on first g, got %d", afterFirstG.cursor)
+	}
+
+	afterSecondG := sendRune(afterFirstG, 'g')
+	if afterSecondG.pendingG {
+		t.Fatalf("expected pendingG=false after gg, got true")
+	}
+	if afterSecondG.cursor != 0 {
+		t.Fatalf("expected cursor at first task (0), got %d", afterSecondG.cursor)
+	}
+	if afterSecondG.contentScroll != 0 {
+		t.Fatalf("expected contentScroll reset to 0, got %d", afterSecondG.contentScroll)
+	}
+}
+
+func TestBrowsePendingGCanceledByOtherKey(t *testing.T) {
+	m := makeBrowseModelWithTasks(5)
+	m.cursor = 2
+
+	afterG := sendRune(m, 'g')
+	if !afterG.pendingG {
+		t.Fatalf("expected pendingG=true, got false")
+	}
+
+	afterRight, _ := afterG.Update(tea.KeyMsg{Type: tea.KeyRight})
+	afterRightModel := afterRight.(model)
+	if afterRightModel.pendingG {
+		t.Fatalf("expected non-g key to cancel pendingG, still true")
+	}
+	if afterRightModel.cursor != 3 {
+		t.Fatalf("expected right-arrow to advance cursor to 3, got %d", afterRightModel.cursor)
+	}
+
+	afterSecondG := sendRune(afterRightModel, 'g')
+	if !afterSecondG.pendingG {
+		t.Fatalf("expected fresh pendingG=true, got false")
+	}
+	if afterSecondG.cursor != 3 {
+		t.Fatalf("expected single-g not to jump (canceled gg sequence), got cursor=%d", afterSecondG.cursor)
+	}
+}

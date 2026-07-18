@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
+	"punchlist/config"
 	"strings"
 	"testing"
 	"time"
@@ -280,4 +283,117 @@ func TestSplitTitleAndModifiers(t *testing.T) {
 			t.Errorf("expected tags modifier, got %v", mods)
 		}
 	})
+}
+
+// test that pin todo walks past a scope marked accepting: false (pin #12)
+func TestCreateWalksPastClosedScope(t *testing.T) {
+	teardown := setupTest(t)
+	defer teardown()
+
+	// parent scope (accepting by default)
+	if _, err := executeCommand("init"); err != nil {
+		t.Fatalf("parent init failed: %v", err)
+	}
+	parentDir, _ := os.Getwd()
+
+	// closed child scope
+	childDir := filepath.Join(parentDir, "child")
+	if err := os.MkdirAll(childDir, 0755); err != nil {
+		t.Fatalf("mkdir child: %v", err)
+	}
+	if err := os.Chdir(childDir); err != nil {
+		t.Fatalf("chdir child: %v", err)
+	}
+	if _, err := executeCommand("init"); err != nil {
+		t.Fatalf("child init failed: %v", err)
+	}
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		t.Fatalf("load child config: %v", err)
+	}
+	closed := false
+	cfg.Accepting = &closed
+	if err := config.SaveConfig(cfg); err != nil {
+		t.Fatalf("save child config: %v", err)
+	}
+
+	// a task created in the closed child scope lands in the parent
+	output, err := executeCommand("todo", "walked task")
+	if err != nil {
+		t.Fatalf("todo in closed scope failed: %v", err)
+	}
+	if !strings.Contains(output, "closed to new tasks") {
+		t.Errorf("expected closed-scope notice, got: %s", output)
+	}
+	if !strings.Contains(output, filepath.Join(parentDir, "tasks")) {
+		t.Errorf("expected task created under parent scope, got: %s", output)
+	}
+	entries, _ := os.ReadDir(filepath.Join(childDir, "tasks"))
+	if len(entries) != 0 {
+		t.Errorf("expected no tasks in closed child scope, found %d", len(entries))
+	}
+	parentEntries, _ := os.ReadDir(filepath.Join(parentDir, "tasks"))
+	if len(parentEntries) != 1 {
+		t.Errorf("expected 1 task in parent scope, found %d", len(parentEntries))
+	}
+
+	// ls / note / done still serve the closed scope: seed a task by
+	// temporarily reopening, then close again and operate on it
+	open := true
+	cfg.Accepting = &open
+	if err := config.SaveConfig(cfg); err != nil {
+		t.Fatalf("reopen child config: %v", err)
+	}
+	if _, err := executeCommand("todo", "local task"); err != nil {
+		t.Fatalf("todo in reopened scope failed: %v", err)
+	}
+	cfg.Accepting = &closed
+	if err := config.SaveConfig(cfg); err != nil {
+		t.Fatalf("re-close child config: %v", err)
+	}
+
+	lsOut, err := executeCommand("ls")
+	if err != nil {
+		t.Fatalf("ls in closed scope failed: %v", err)
+	}
+	if !strings.Contains(lsOut, "local task") {
+		t.Errorf("ls should still serve a closed scope, got: %s", lsOut)
+	}
+	if _, err := executeCommand("note", "1", "still serviceable"); err != nil {
+		t.Fatalf("note in closed scope failed: %v", err)
+	}
+	if _, err := executeCommand("done", "1"); err != nil {
+		t.Fatalf("done in closed scope failed: %v", err)
+	}
+}
+
+// test that a closed scope with no accepting ancestor fails loudly
+func TestCreateClosedScopeNoAcceptingAncestor(t *testing.T) {
+	teardown := setupTest(t)
+	defer teardown()
+
+	if _, err := executeCommand("init"); err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	closed := false
+	cfg.Accepting = &closed
+	if err := config.SaveConfig(cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	err = createTaskFromArgs([]string{"should not land"})
+	if err == nil {
+		t.Fatal("expected error creating in closed scope with no accepting ancestor")
+	}
+	if !strings.Contains(err.Error(), "closed to new tasks") {
+		t.Errorf("unexpected error: %v", err)
+	}
+	entries, _ := os.ReadDir("tasks")
+	if len(entries) != 0 {
+		t.Errorf("expected no task files, found %d", len(entries))
+	}
 }

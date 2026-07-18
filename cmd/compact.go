@@ -32,7 +32,7 @@ func newCompactCmd() *cobra.Command {
 				if printNotPunchlistError(err) {
 					return
 				}
-				fmt.Fprintf(os.Stderr, "Error compacting tasks: %v\n", err)
+				failf("Error compacting tasks: %v\n", err)
 			}
 		},
 	}

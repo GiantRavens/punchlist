@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"punchlist/task"
 	"strconv"
@@ -22,7 +21,7 @@ func newShowCmd() *cobra.Command {
 			// parse id and load task
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Invalid task ID: %v\n", err)
+				failf("Invalid task ID: %v\n", err)
 				return
 			}
 
@@ -31,13 +30,13 @@ func newShowCmd() *cobra.Command {
 				if printNotPunchlistError(err) {
 					return
 				}
-				fmt.Fprintf(os.Stderr, "Error finding task: %v\n", err)
+				failf("Error finding task: %v\n", err)
 				return
 			}
 
 			t, err := task.Parse(taskPath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error parsing task: %v\n", err)
+				failf("Error parsing task: %v\n", err)
 				return
 			}
 
@@ -45,7 +44,7 @@ func newShowCmd() *cobra.Command {
 			if jsonOutput {
 				acceptance := parseAcceptance(t.Body)
 				if err := marshalTaskShow(t, acceptance); err != nil {
-					fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+					failf("Error encoding JSON: %v\n", err)
 				}
 				return
 			}

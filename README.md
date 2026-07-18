@@ -105,11 +105,14 @@ States are fully configurable. Default states from `pin init`:
 | State | Aliases | Browse hotkey |
 |---|---|---|
 | `TODO` | todo | `t` |
-| `BEGUN` | begun, started, inprogress | `b` |
+| `BEGUN` | begun, started, inprogress | `s` |
+| `BLOCKED` | blocked, block | `b` |
 | `FOLLOWUP` | followup, confirm | `f` |
-| `DEFER` | defer | `l` |
+| `DEFER` | defer | `z` |
 | `NOTDO` | notdo | `x` |
 | `DONE` | done, complete, completed | `d` |
+
+Existing projects whose `config.yaml` spells out `states:` keep their configured hotkeys. A configured hotkey that collides with a browse navigation key (e.g. the old default `l` for DEFER, now next-task) is shadowed — navigation wins and the hotkey is dropped from the browse help line. Update the `tui_hotkey:` entries in your config to adopt the new scheme.
 
 Change state with any state token:
 
@@ -133,7 +136,24 @@ pin browse
 pin browse todo
 ```
 
-`pin browse` opens a keyboard-driven TUI viewer. Move between tasks with `←`/`→`, `K`/`J`, or `space`; scroll long task bodies with `↑`/`↓`, `pgup`/`pgdn`, `home`, and `end`; update state with hotkeys, add notes with `n`, open in your editor with `e`, set priority with `1–9`/`0`, quit with `q`.
+`pin browse` opens a keyboard-driven TUI viewer with vim-respecting keys:
+
+| Key | Action |
+|---|---|
+| `h` / `l` (or `←`/`→`, `space`) | previous / next task |
+| `j` / `k` (or `↑`/`↓`, mouse wheel) | scroll task body down / up |
+| `pgup`/`pgdn`, `ctrl+u`/`ctrl+d`, `home`/`end` | page / jump within body |
+| `tab` / `shift+tab` | jump to the head of the next / previous state group |
+| `gg` / `G` | first / last task |
+| `/` | filter tasks (title, state, tags, body); `esc` clears |
+| state hotkeys (`t`,`s`,`b`,`f`,`z`,`x`,`d`) | set state and advance — uppercase also works (`F` = followup) |
+| `n` | create a new task — input accepts the pin grammar (`fix the thing pri:1 tags:{x}`, leading state token ok) |
+| `N` | add a note to the current task |
+| `e` | open in `$EDITOR` |
+| `1`–`9`, `0` | set priority (0 = 10) |
+| `q` / `ctrl+c` | quit |
+
+When a state hotkey is used, the state is applied and the cursor advances to the next task. Mouse wheel scrolling is on by default (hold Shift to select text in the terminal; in tmux, wheel pass-through requires `set -g mouse on`).
 When a state hotkey is used in browse, the state is applied and the cursor advances to the next task.
 
 ---
@@ -154,6 +174,24 @@ pin edit 12                                       # open in $EDITOR
 pin done 2 3 6-9
 pin del "[2-3, 7]"     # quote brackets in zsh to avoid glob expansion
 ```
+
+---
+
+## Health checking — pin doctor
+
+Task files are plain markdown, which means hand edits, LLM sessions, migrations, and typo'd commands can leave files that parse cleanly but are semantically wrong. `pin doctor` audits the whole scope:
+
+```bash
+pin doctor              # report: unknown states, duplicated sections, duplicate ids,
+                        # dangling deps, title/H1 divergence, next_id drift, ...
+pin doctor --json       # stable check names, for scripts and sensors
+pin doctor --fix        # apply only mechanically safe repairs (merge duplicated
+                        # Log/Notes sections, preserving every entry)
+```
+
+Judgment-shaped findings (an unknown state that might be intentional, a diverged title) are always report-only — fix those with normal pin commands (`pin todo 46`, `pin title 46 "..."`).
+
+Exit status is lint-style: `0` when the scope is clean (or `--fix` repaired everything), `1` when findings remain — so `pin doctor && deploy`-style gating and sensor scripts work without parsing output.
 
 ---
 
@@ -180,6 +218,8 @@ Structured checkboxes from a `## Acceptance` section in the task body:
 
 ```bash
 pin acceptance 1       # list criteria with indices (alias: pin checks)
+pin acceptance add 1 "Tests pass"   # append a new criterion (creates the section if missing)
+pin acceptance rm 1 2  # remove item 2 (alias: remove)
 pin check 1 2          # toggle item 2 checked/unchecked
 pin show --json 1 | jq .acceptance    # structured array: text, checked, index
 ```
@@ -345,6 +385,7 @@ For implementation details, see `mcp/PLAN.md` (architecture) and `mcp/CLAUDE.md`
 - `edit_start_insert`: add `+startinsert` for vim/nvim (default true)
 - `edit_goyo`: add `+Goyo` for vim/nvim (default false)
 - `browse_margin`: columns of left/right margin in `pin browse` (default 12)
+- `accepting`: when false, the scope is closed to new tasks — `pin todo` walks up to the nearest accepting parent scope, while `ls`/`done`/`note` still serve the scope (default true)
 
 ```bash
 pin config          # open config in $EDITOR

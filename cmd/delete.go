@@ -21,7 +21,7 @@ func newDeleteCmd() *cobra.Command {
 			// parse one or many ids
 			ids, err := parseTaskIDs(args)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Invalid task IDs: %v\n", err)
+				failf("Invalid task IDs: %v\n", err)
 				return
 			}
 			deleteTasks(ids)
@@ -36,7 +36,7 @@ func deleteTasks(ids []int) {
 			if printNotPunchlistError(err) {
 				return
 			}
-			fmt.Fprintf(os.Stderr, "Error deleting task %d: %v\n", id, err)
+			failf("Error deleting task %d: %v\n", id, err)
 		}
 	}
 }

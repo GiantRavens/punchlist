@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"punchlist/task"
 	"strconv"
 	"strings"
@@ -21,7 +20,7 @@ func newMetaCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Invalid task ID: %v\n", err)
+				failf("Invalid task ID: %v\n", err)
 				return
 			}
 
@@ -30,13 +29,13 @@ func newMetaCmd() *cobra.Command {
 				if printNotPunchlistError(err) {
 					return
 				}
-				fmt.Fprintf(os.Stderr, "Error finding task: %v\n", err)
+				failf("Error finding task: %v\n", err)
 				return
 			}
 
 			t, err := task.Parse(taskPath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error parsing task: %v\n", err)
+				failf("Error parsing task: %v\n", err)
 				return
 			}
 
@@ -53,7 +52,7 @@ func newMetaCmd() *cobra.Command {
 			for _, arg := range args[1:] {
 				key, value, ok := parseMetaKV(arg)
 				if !ok {
-					fmt.Fprintf(os.Stderr, "Invalid meta argument (expected key=value): %s\n", arg)
+					failf("Invalid meta argument (expected key=value): %s\n", arg)
 					return
 				}
 				if value == "" {
@@ -68,7 +67,7 @@ func newMetaCmd() *cobra.Command {
 
 			t.UpdatedAt = time.Now()
 			if err := t.Write(taskPath); err != nil {
-				fmt.Fprintf(os.Stderr, "Error updating task: %v\n", err)
+				failf("Error updating task: %v\n", err)
 				return
 			}
 			fmt.Printf("Updated meta for task %d\n", id)

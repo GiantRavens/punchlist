@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"punchlist/task"
 	"strconv"
@@ -11,36 +11,58 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// locate a task file by id prefix
+// handleHelpFlag short-circuits state commands that have DisableFlagParsing set,
+// so users can still run `pin todo --help` etc. Returns true if help was shown
+// and the caller should return.
+func handleHelpFlag(cmd *cobra.Command, args []string) bool {
+	for _, a := range args {
+		if a == "--help" || a == "-h" {
+			_ = cmd.Help()
+			return true
+		}
+	}
+	return false
+}
+
+// locate a task file by id prefix. Walks tasks/ recursively so by-id
+// resolution agrees with pin ls, which lists tasks in subfolders too —
+// a top-level-only ReadDir here made every by-id command fail on tasks
+// that ls had just shown (futhark bridge punchlist deck, 2026-07-15).
 func findTaskFile(id int) (string, error) {
 	tasksPath, err := tasksDir()
 	if err != nil {
 		return "", err
 	}
-	files, err := os.ReadDir(tasksPath)
+
+	var matches []string
+	err = filepath.WalkDir(tasksPath, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".md") {
+			return nil
+		}
+		prefix := strings.SplitN(d.Name(), "-", 2)[0]
+		parsedID, convErr := strconv.Atoi(prefix)
+		if convErr != nil || parsedID != id {
+			return nil
+		}
+		matches = append(matches, path)
+		return nil
+	})
 	if err != nil {
 		return "", err
 	}
 
-	for _, file := range files {
-		name := file.Name()
-		if !strings.HasSuffix(name, ".md") {
-			continue
-		}
-		prefix := strings.SplitN(name, "-", 2)[0]
-		if prefix == "" {
-			continue
-		}
-		parsedID, err := strconv.Atoi(prefix)
-		if err != nil {
-			continue
-		}
-		if parsedID == id {
-			return filepath.Join(tasksPath, name), nil
-		}
+	switch len(matches) {
+	case 0:
+		return "", fmt.Errorf("task with ID %d not found", id)
+	case 1:
+		return matches[0], nil
+	default:
+		// nothing enforces id uniqueness across subfolders; refuse to guess
+		return "", fmt.Errorf("task ID %d is ambiguous (%d files): %s", id, len(matches), strings.Join(matches, ", "))
 	}
-
-	return "", fmt.Errorf("task with ID %d not found", id)
 }
 
 // create the todo command
@@ -48,18 +70,26 @@ func newTodoCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "todo [id]",
 		Aliases: []string{"TODO"},
-		Short:   "Move a task back to TODO",
-		Args:    cobra.MinimumNArgs(1),
+		Short:   "Move a task back to TODO, or create one (use --ticket for a Problem/Approach/Acceptance scaffold)",
+		Args: cobra.MinimumNArgs(1),
+		// Allow titles that begin with `--` (e.g. `pin todo "--rerun the orca cycle"`)
+		// to pass through cobra's flag parser as plain args. State-creation commands
+		// take only IDs and titles; no command-specific flags. `pin <verb> --help`
+		// still works because cobra's help command runs at the parent level.
+		DisableFlagParsing: true,
 		Run: func(cmd *cobra.Command, args []string) {
+			if handleHelpFlag(cmd, args) {
+				return
+			}
 			ids, err := parseTaskIDs(args)
 			if err != nil {
 				if shouldCreateStateFromArgs(args) {
 					if err := createTaskFromArgs(append([]string{string(task.StateTodo)}, args...)); err != nil {
-						fmt.Fprintf(os.Stderr, "Failed to create todo task: %v\n", err)
+						failf("Failed to create todo task: %v\n", err)
 					}
 					return
 				}
-				fmt.Fprintf(os.Stderr, "Invalid task IDs: %v\n", err)
+				failf("Invalid task IDs: %v\n", err)
 				return
 			}
 			updateTaskState(ids, task.StateTodo)
@@ -73,18 +103,26 @@ func newStartCmd() *cobra.Command {
 		Use:     "start [id]",
 		Aliases: []string{"begun", "BEGUN", "START"},
 		Short:   "Start a task",
-		Args:    cobra.MinimumNArgs(1),
+		Args: cobra.MinimumNArgs(1),
+		// Allow titles that begin with `--` (e.g. `pin todo "--rerun the orca cycle"`)
+		// to pass through cobra's flag parser as plain args. State-creation commands
+		// take only IDs and titles; no command-specific flags. `pin <verb> --help`
+		// still works because cobra's help command runs at the parent level.
+		DisableFlagParsing: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			// parse one or many ids
+			if handleHelpFlag(cmd, args) {
+				return
+			}
 			ids, err := parseTaskIDs(args)
 			if err != nil {
 				if shouldCreateStateFromArgs(args) {
 					if err := createTaskFromArgs(append([]string{string(task.StateBegun)}, args...)); err != nil {
-						fmt.Fprintf(os.Stderr, "Failed to create begun task: %v\n", err)
+						failf("Failed to create begun task: %v\n", err)
 					}
 					return
 				}
-				fmt.Fprintf(os.Stderr, "Invalid task IDs: %v\n", err)
+				failf("Invalid task IDs: %v\n", err)
 				return
 			}
 			updateTaskState(ids, task.StateBegun)
@@ -98,18 +136,26 @@ func newDoneCmd() *cobra.Command {
 		Use:     "done [id]",
 		Aliases: []string{"DONE"},
 		Short:   "Complete a task",
-		Args:    cobra.MinimumNArgs(1),
+		Args: cobra.MinimumNArgs(1),
+		// Allow titles that begin with `--` (e.g. `pin todo "--rerun the orca cycle"`)
+		// to pass through cobra's flag parser as plain args. State-creation commands
+		// take only IDs and titles; no command-specific flags. `pin <verb> --help`
+		// still works because cobra's help command runs at the parent level.
+		DisableFlagParsing: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			// parse one or many ids
+			if handleHelpFlag(cmd, args) {
+				return
+			}
 			ids, err := parseTaskIDs(args)
 			if err != nil {
 				if shouldCreateStateFromArgs(args) {
 					if err := createTaskFromArgs(append([]string{string(task.StateDone)}, args...)); err != nil {
-						fmt.Fprintf(os.Stderr, "Failed to create done task: %v\n", err)
+						failf("Failed to create done task: %v\n", err)
 					}
 					return
 				}
-				fmt.Fprintf(os.Stderr, "Invalid task IDs: %v\n", err)
+				failf("Invalid task IDs: %v\n", err)
 				return
 			}
 			updateTaskState(ids, task.StateDone)
@@ -197,18 +243,26 @@ func newDeferCmd() *cobra.Command {
 		Use:     "notdo [id]",
 		Aliases: []string{"defer", "DEFER", "NOTDO"},
 		Short:   "Mark a task as not to do",
-		Args:    cobra.MinimumNArgs(1),
+		Args: cobra.MinimumNArgs(1),
+		// Allow titles that begin with `--` (e.g. `pin todo "--rerun the orca cycle"`)
+		// to pass through cobra's flag parser as plain args. State-creation commands
+		// take only IDs and titles; no command-specific flags. `pin <verb> --help`
+		// still works because cobra's help command runs at the parent level.
+		DisableFlagParsing: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			// parse one or many ids
+			if handleHelpFlag(cmd, args) {
+				return
+			}
 			ids, err := parseTaskIDs(args)
 			if err != nil {
 				if shouldCreateStateFromArgs(args) {
 					if err := createTaskFromArgs(append([]string{string(task.StateNotDo)}, args...)); err != nil {
-						fmt.Fprintf(os.Stderr, "Failed to create notdo task: %v\n", err)
+						failf("Failed to create notdo task: %v\n", err)
 					}
 					return
 				}
-				fmt.Fprintf(os.Stderr, "Invalid task IDs: %v\n", err)
+				failf("Invalid task IDs: %v\n", err)
 				return
 			}
 			updateTaskState(ids, task.StateNotDo)
@@ -222,18 +276,26 @@ func newBlockCmd() *cobra.Command {
 		Use:     "block [id]",
 		Aliases: []string{"BLOCK", "waiting", "WAITING"},
 		Short:   "Change a task's status to BLOCKED",
-		Args:    cobra.MinimumNArgs(1),
+		Args: cobra.MinimumNArgs(1),
+		// Allow titles that begin with `--` (e.g. `pin todo "--rerun the orca cycle"`)
+		// to pass through cobra's flag parser as plain args. State-creation commands
+		// take only IDs and titles; no command-specific flags. `pin <verb> --help`
+		// still works because cobra's help command runs at the parent level.
+		DisableFlagParsing: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			// parse one or many ids
+			if handleHelpFlag(cmd, args) {
+				return
+			}
 			ids, err := parseTaskIDs(args)
 			if err != nil {
 				if shouldCreateStateFromArgs(args) {
 					if err := createTaskFromArgs(append([]string{string(task.StateBlock)}, args...)); err != nil {
-						fmt.Fprintf(os.Stderr, "Failed to create block task: %v\n", err)
+						failf("Failed to create block task: %v\n", err)
 					}
 					return
 				}
-				fmt.Fprintf(os.Stderr, "Invalid task IDs: %v\n", err)
+				failf("Invalid task IDs: %v\n", err)
 				return
 			}
 			updateTaskState(ids, task.StateBlock)
@@ -247,18 +309,26 @@ func newConfirmCmd() *cobra.Command {
 		Use:     "confirm [id]",
 		Aliases: []string{"CONFIRM", "followup", "FOLLOWUP", "review", "REVIEW"},
 		Short:   "Mark a task as needing confirmation",
-		Args:    cobra.MinimumNArgs(1),
+		Args: cobra.MinimumNArgs(1),
+		// Allow titles that begin with `--` (e.g. `pin todo "--rerun the orca cycle"`)
+		// to pass through cobra's flag parser as plain args. State-creation commands
+		// take only IDs and titles; no command-specific flags. `pin <verb> --help`
+		// still works because cobra's help command runs at the parent level.
+		DisableFlagParsing: true,
 		Run: func(cmd *cobra.Command, args []string) {
 			// parse one or many ids
+			if handleHelpFlag(cmd, args) {
+				return
+			}
 			ids, err := parseTaskIDs(args)
 			if err != nil {
 				if shouldCreateStateFromArgs(args) {
 					if err := createTaskFromArgs(append([]string{string(task.StateConfirm)}, args...)); err != nil {
-						fmt.Fprintf(os.Stderr, "Failed to create confirm task: %v\n", err)
+						failf("Failed to create confirm task: %v\n", err)
 					}
 					return
 				}
-				fmt.Fprintf(os.Stderr, "Invalid task IDs: %v\n", err)
+				failf("Invalid task IDs: %v\n", err)
 				return
 			}
 			updateTaskState(ids, task.StateConfirm)
@@ -273,7 +343,7 @@ func updateTaskState(ids []int, newState task.State) {
 			if printNotPunchlistError(err) {
 				return
 			}
-			fmt.Fprintf(os.Stderr, "Error updating task %d: %v\n", id, err)
+			failf("Error updating task %d: %v\n", id, err)
 		}
 	}
 }

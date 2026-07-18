@@ -112,9 +112,26 @@ def serialize(obj: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
+def _index_of_heading_line(body: str, heading: str) -> int:
+    """Find heading only as a complete line (line-anchored, matching Go's
+    indexOfHeadingLine). A plain substring find corrupted task files whose
+    prose merely mentioned a section heading (pin #28)."""
+    search_from = 0
+    while True:
+        idx = body.find(heading, search_from)
+        if idx == -1:
+            return -1
+        at_line_start = idx == 0 or body[idx - 1] == "\n"
+        end = idx + len(heading)
+        at_line_end = end == len(body) or body[end] in "\n\r"
+        if at_line_start and at_line_end:
+            return idx
+        search_from = idx + 1
+
+
 def split_section(body: str, heading: str) -> tuple[str, str, str, bool]:
     """Split markdown body into (before, section, after, found) for a heading."""
-    idx = body.find(heading)
+    idx = _index_of_heading_line(body, heading)
     if idx == -1:
         return body, "", "", False
     before = body[:idx]

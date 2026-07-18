@@ -197,3 +197,4 @@ each changed task gets a log entry noting the old and new id.
 - `browse_margin`: columns of left/right margin in `pin browse` (default 12)
 - `title_max_len`: max stored title length before truncation (default 80)
 - `ls_title_max_len`: max title length shown in `pin ls` (default 80)
+- `accepting`: when false, the scope is closed to new tasks; `pin todo` walks up to the nearest accepting parent scope (default true)

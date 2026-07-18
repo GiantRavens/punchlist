@@ -246,3 +246,133 @@ func TestParseAndWriteTask(t *testing.T) {
 		}
 	})
 }
+
+// test tolerant parsing of non-RFC3339 frontmatter timestamps (pin #11)
+func TestParseTimestampTolerant(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		want  time.Time
+	}{
+		{
+			"go time.Time.String() format",
+			"2026-03-14 09:22:33.123456789 -0500 CDT",
+			time.Date(2026, 3, 14, 9, 22, 33, 123456789, time.FixedZone("CDT", -5*3600)),
+		},
+		{
+			"space-separated with numeric offset",
+			"2026-03-14 09:22:33 -0500",
+			time.Date(2026, 3, 14, 9, 22, 33, 0, time.FixedZone("", -5*3600)),
+		},
+		{
+			"space-separated with colon offset",
+			"2026-03-14 09:22:33.123456 -05:00",
+			time.Date(2026, 3, 14, 9, 22, 33, 123456000, time.FixedZone("", -5*3600)),
+		},
+		{
+			"python str(datetime) attached offset",
+			"2026-03-14 09:22:33.123456-05:00",
+			time.Date(2026, 3, 14, 9, 22, 33, 123456000, time.FixedZone("", -5*3600)),
+		},
+		{
+			"naive space-separated assumes local",
+			"2026-03-14 09:22:33",
+			time.Date(2026, 3, 14, 9, 22, 33, 0, time.Local),
+		},
+		{
+			"ISO-T without offset assumes local",
+			"2026-03-14T09:22:33",
+			time.Date(2026, 3, 14, 9, 22, 33, 0, time.Local),
+		},
+		{
+			"date only assumes local midnight",
+			"2026-03-14",
+			time.Date(2026, 3, 14, 0, 0, 0, 0, time.Local),
+		},
+		{
+			"strict RFC3339 still works",
+			"2026-03-14T09:22:33.123456-05:00",
+			time.Date(2026, 3, 14, 9, 22, 33, 123456000, time.FixedZone("", -5*3600)),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			parsed, ok := parseTimestamp(tc.value)
+			if !ok {
+				t.Fatalf("parseTimestamp(%q) failed", tc.value)
+			}
+			if !parsed.Equal(tc.want) {
+				t.Errorf("parseTimestamp(%q) = %v, want %v", tc.value, parsed, tc.want)
+			}
+		})
+	}
+
+	if _, ok := parseTimestamp("not a timestamp"); ok {
+		t.Error("expected failure for garbage input")
+	}
+}
+
+// test that space-separated timestamps parse via normalization while
+// preserving block-style fields the lenient parser would drop (pin #11)
+func TestParseSpaceSeparatedTimestampsPreservesTags(t *testing.T) {
+	sandboxDir := t.TempDir()
+
+	payload := strings.Join([]string{
+		"---",
+		"id: 42",
+		"title: Space timestamp task",
+		"state: TODO",
+		"priority: 2",
+		"tags:",
+		"  - parser",
+		"  - robustness",
+		"created_at: 2026-03-14 09:22:33.123456789 -0500 CDT",
+		"updated_at: 2026-03-14 10:00:00 -0500",
+		"---",
+		"",
+		"# Space timestamp task",
+		"",
+		"Body line.",
+	}, "\n")
+
+	filePath := filepath.Join(sandboxDir, "space_ts_task.md")
+	if err := os.WriteFile(filePath, []byte(payload), 0644); err != nil {
+		t.Fatalf("Failed to write task file: %v", err)
+	}
+
+	parsed, err := Parse(filePath)
+	if err != nil {
+		t.Fatalf("Parse() failed: %v", err)
+	}
+
+	if parsed.ID != 42 || parsed.Title != "Space timestamp task" {
+		t.Errorf("core fields wrong: %+v", parsed)
+	}
+	wantCreated := time.Date(2026, 3, 14, 9, 22, 33, 123456789, time.FixedZone("CDT", -5*3600))
+	if !parsed.CreatedAt.Equal(wantCreated) {
+		t.Errorf("CreatedAt = %v, want %v", parsed.CreatedAt, wantCreated)
+	}
+	if !reflect.DeepEqual(parsed.Tags, []string{"parser", "robustness"}) {
+		t.Errorf("block-style tags not preserved through normalization: %v", parsed.Tags)
+	}
+
+	// on the next write the timestamps normalize to ISO-T
+	if err := parsed.Write(filePath); err != nil {
+		t.Fatalf("Write() failed: %v", err)
+	}
+	raw, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if strings.Contains(string(raw), "created_at: 2026-03-14 09:22") {
+		t.Errorf("expected normalized ISO-T timestamp on rewrite, got:\n%s", raw)
+	}
+	reparsed, err := Parse(filePath)
+	if err != nil {
+		t.Fatalf("re-Parse() failed: %v", err)
+	}
+	if !reparsed.CreatedAt.Equal(wantCreated) {
+		t.Errorf("rewrite changed CreatedAt: %v != %v", reparsed.CreatedAt, wantCreated)
+	}
+}

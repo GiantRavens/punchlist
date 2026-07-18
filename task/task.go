@@ -112,11 +112,21 @@ func Parse(filePath string) (*Task, error) {
 
 	var task Task
 	if err := yaml.Unmarshal([]byte(yamlContent.String()), &task); err != nil {
-		fallbackTask, fallbackErr := parseFrontmatterLenient(yamlContent.String())
-		if fallbackErr != nil {
-			return nil, fmt.Errorf("failed to unmarshal frontmatter: %w", err)
+		recovered := false
+		if normalized, changed := normalizeFrontmatterTimestamps(yamlContent.String()); changed {
+			var normalizedTask Task
+			if retryErr := yaml.Unmarshal([]byte(normalized), &normalizedTask); retryErr == nil {
+				task = normalizedTask
+				recovered = true
+			}
 		}
-		task = *fallbackTask
+		if !recovered {
+			fallbackTask, fallbackErr := parseFrontmatterLenient(yamlContent.String())
+			if fallbackErr != nil {
+				return nil, fmt.Errorf("failed to unmarshal frontmatter: %w", err)
+			}
+			task = *fallbackTask
+		}
 	}
 
 	task.Path = filePath
@@ -278,6 +288,22 @@ func parseInlineIntList(value string) []int {
 	return out
 }
 
+// tolerant fallback layouts for timestamps written by non-pin writers
+// (e.g. the 2026-03-era space-separated formats). Layouts marked local
+// carry no zone information and are parsed in local time.
+var tolerantTimestampLayouts = []struct {
+	layout string
+	local  bool
+}{
+	{"2006-01-02 15:04:05.999999999 -0700 MST", false}, // Go time.Time.String()
+	{"2006-01-02 15:04:05.999999999 -0700", false},
+	{"2006-01-02 15:04:05.999999999 -07:00", false},
+	{"2006-01-02 15:04:05.999999999Z07:00", false}, // Python str(datetime) and friends
+	{"2006-01-02 15:04:05.999999999", true},        // naive, assume local
+	{"2006-01-02T15:04:05.999999999", true},        // ISO-T without offset
+	{"2006-01-02", true},                           // date only
+}
+
 func parseTimestamp(value string) (time.Time, bool) {
 	parsed, err := time.Parse(time.RFC3339Nano, value)
 	if err == nil {
@@ -287,7 +313,62 @@ func parseTimestamp(value string) (time.Time, bool) {
 	if err == nil {
 		return parsed, true
 	}
+	for _, fallback := range tolerantTimestampLayouts {
+		if fallback.local {
+			parsed, err = time.ParseInLocation(fallback.layout, value, time.Local)
+		} else {
+			parsed, err = time.Parse(fallback.layout, value)
+		}
+		if err == nil {
+			return parsed, true
+		}
+	}
 	return time.Time{}, false
+}
+
+// timestamp frontmatter keys eligible for tolerant normalization
+var timestampFrontmatterKeys = map[string]bool{
+	"due":          true,
+	"created_at":   true,
+	"updated_at":   true,
+	"started_at":   true,
+	"completed_at": true,
+}
+
+// rewrite tolerated non-RFC3339 timestamp values to RFC3339 so the strict
+// yaml path (which preserves every other field, including block-style lists)
+// can parse the file. Values are normalized to ISO-T on the next write.
+func normalizeFrontmatterTimestamps(frontmatter string) (string, bool) {
+	lines := strings.Split(frontmatter, "\n")
+	changed := false
+	for i, line := range lines {
+		if line == "" || line[0] == ' ' || line[0] == '\t' || line[0] == '-' {
+			continue // timestamp keys only appear at the top level
+		}
+		idx := strings.Index(line, ":")
+		if idx == -1 {
+			continue
+		}
+		key := strings.TrimSpace(line[:idx])
+		if !timestampFrontmatterKeys[key] {
+			continue
+		}
+		value := trimOuterQuotes(strings.TrimSpace(line[idx+1:]))
+		if value == "" {
+			continue
+		}
+		if _, err := time.Parse(time.RFC3339Nano, value); err == nil {
+			continue // already strict; leave untouched
+		}
+		if parsed, ok := parseTimestamp(value); ok {
+			lines[i] = key + ": " + parsed.Format(time.RFC3339Nano)
+			changed = true
+		}
+	}
+	if !changed {
+		return frontmatter, false
+	}
+	return strings.Join(lines, "\n"), true
 }
 
 // write serializes a Task back to disk

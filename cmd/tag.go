@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"punchlist/task"
 	"strings"
 	"time"
@@ -19,13 +18,13 @@ func newTagCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			ids, tagArgs, err := splitIDsAndTagArgs(args)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Invalid tag command: %v\n", err)
+				failf("Invalid tag command: %v\n", err)
 				return
 			}
 
 			tags, err := parseTagArgs(tagArgs)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Invalid tags: %v\n", err)
+				failf("Invalid tags: %v\n", err)
 				return
 			}
 
@@ -121,7 +120,7 @@ func updateTaskTags(ids []int, tags []string) {
 			if printNotPunchlistError(err) {
 				return
 			}
-			fmt.Fprintf(os.Stderr, "Error updating task %d: %v\n", id, err)
+			failf("Error updating task %d: %v\n", id, err)
 		}
 	}
 }

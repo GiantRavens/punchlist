@@ -20,7 +20,7 @@ func newSearchCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			stateCatalog, err := loadStateCatalog()
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error loading state config: %v\n", err)
+				failf("Error loading state config: %v\n", err)
 				return
 			}
 			// read filter and sort flags
@@ -31,16 +31,43 @@ func newSearchCmd() *cobra.Command {
 			lsState, _ := cmd.Flags().GetString("state")
 			lsStatus, _ := cmd.Flags().GetString("status")
 			jsonOutput, _ := cmd.Flags().GetBool("json")
+			lsChunk, _ := cmd.Flags().GetInt("chunk")
+			lsPage, _ := cmd.Flags().GetInt("page")
+			lsLimit, _ := cmd.Flags().GetInt("limit")
+
+			if lsLimit < 0 {
+				failf("Error: --limit must be >= 0\n")
+				return
+			}
+			if lsChunk < 0 {
+				failf("Error: --chunk must be >= 0\n")
+				return
+			}
+			if lsLimit > 0 && lsChunk > 0 && lsLimit != lsChunk {
+				failf("Error: --limit and --chunk both set with different values (use one)\n")
+				return
+			}
+			if lsChunk == 0 && lsLimit > 0 {
+				lsChunk = lsLimit
+			}
+			if lsPage < 1 {
+				failf("Error: --page must be >= 1\n")
+				return
+			}
+			if lsChunk == 0 && lsPage > 1 {
+				failf("Error: --page requires --chunk or --limit\n")
+				return
+			}
 
 			targetPath, remainingArgs := extractTargetPath(args)
 			if len(remainingArgs) == 0 {
-				fmt.Fprintln(os.Stderr, "Error: search query required")
+				failf("Error: search query required\n")
 				return
 			}
 			query := strings.Join(remainingArgs, " ")
 			query = strings.TrimSpace(query)
 			if query == "" {
-				fmt.Fprintln(os.Stderr, "Error: search query required")
+				failf("Error: search query required\n")
 				return
 			}
 			queryLower := strings.ToLower(query)
@@ -53,7 +80,7 @@ func newSearchCmd() *cobra.Command {
 					if printNotPunchlistError(err) {
 						return
 					}
-					fmt.Fprintf(os.Stderr, "Error locating tasks: %v\n", err)
+					failf("Error locating tasks: %v\n", err)
 					return
 				}
 				tasksPath = filepath.Join(root, "tasks")
@@ -63,7 +90,7 @@ func newSearchCmd() *cobra.Command {
 					if printNotPunchlistError(err) {
 						return
 					}
-					fmt.Fprintf(os.Stderr, "Error locating tasks: %v\n", err)
+					failf("Error locating tasks: %v\n", err)
 					return
 				}
 			}
@@ -77,7 +104,7 @@ func newSearchCmd() *cobra.Command {
 			if stateToken == "" {
 				stateToken = lsStatus
 			} else if lsStatus != "" && !strings.EqualFold(lsState, lsStatus) {
-				fmt.Fprintln(os.Stderr, "Error: state provided twice (use either --state or --status)")
+				failf("Error: state provided twice (use either --state or --status)\n")
 				return
 			}
 			filterToken := strings.TrimSpace(stateToken)
@@ -140,7 +167,7 @@ func newSearchCmd() *cobra.Command {
 			})
 
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error searching tasks: %v\n", err)
+				failf("Error searching tasks: %v\n", err)
 				return
 			}
 
@@ -151,10 +178,16 @@ func newSearchCmd() *cobra.Command {
 
 			// order results
 			sortTasks(tasks, lsOrder, lsReverse, stateCatalog)
+			tasks = paginateTasks(tasks, lsChunk, lsPage)
+
+			if len(tasks) == 0 {
+				fmt.Println("No matches found.")
+				return
+			}
 
 			if jsonOutput {
 				if err := marshalTaskList(tasks); err != nil {
-					fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+					failf("Error encoding JSON: %v\n", err)
 				}
 				return
 			}
@@ -201,6 +234,9 @@ func newSearchCmd() *cobra.Command {
 	cmd.Flags().String("status", "", "Alias for --state")
 	cmd.Flags().String("order", "state", "Order by state, id, priority, or date")
 	cmd.Flags().Bool("reverse", false, "Reverse sort order")
+	cmd.Flags().Int("limit", 0, "Limit output to N tasks (0 means all)")
+	cmd.Flags().Int("chunk", 0, "Alias for --limit")
+	cmd.Flags().Int("page", 1, "1-based page number when using --limit")
 	cmd.Flags().Bool("json", false, "Output as JSON")
 
 	return cmd

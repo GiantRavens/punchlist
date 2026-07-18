@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"punchlist/task"
 	"regexp"
 	"strconv"
@@ -43,7 +42,7 @@ func parseAcceptance(body string) []AcceptanceItem {
 
 // create the acceptance command
 func newAcceptanceCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "acceptance [id]",
 		Aliases: []string{"checks"},
 		Short:   "List acceptance criteria for a task",
@@ -51,7 +50,7 @@ func newAcceptanceCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Invalid task ID: %v\n", err)
+				failf("Invalid task ID: %v\n", err)
 				return
 			}
 
@@ -60,13 +59,13 @@ func newAcceptanceCmd() *cobra.Command {
 				if printNotPunchlistError(err) {
 					return
 				}
-				fmt.Fprintf(os.Stderr, "Error finding task: %v\n", err)
+				failf("Error finding task: %v\n", err)
 				return
 			}
 
 			t, err := task.Parse(taskPath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error parsing task: %v\n", err)
+				failf("Error parsing task: %v\n", err)
 				return
 			}
 
@@ -85,6 +84,176 @@ func newAcceptanceCmd() *cobra.Command {
 			}
 		},
 	}
+	cmd.AddCommand(newAcceptanceAddCmd())
+	cmd.AddCommand(newAcceptanceRmCmd())
+	return cmd
+}
+
+// create the acceptance add subcommand
+func newAcceptanceAddCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "add [id] [criterion]",
+		Short: "Add an acceptance criterion to a task",
+		Args:  cobra.ExactArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			id, err := strconv.Atoi(args[0])
+			if err != nil {
+				failf("Invalid task ID: %v\n", err)
+				return
+			}
+			text := strings.TrimSpace(args[1])
+			if text == "" {
+				failf("Acceptance criterion text must not be empty\n")
+				return
+			}
+
+			taskPath, err := findTaskFile(id)
+			if err != nil {
+				if printNotPunchlistError(err) {
+					return
+				}
+				failf("Error finding task: %v\n", err)
+				return
+			}
+
+			t, err := task.Parse(taskPath)
+			if err != nil {
+				failf("Error parsing task: %v\n", err)
+				return
+			}
+
+			t.Body = addAcceptanceItem(t.Body, text)
+			t.UpdatedAt = time.Now()
+			if err := t.Write(taskPath); err != nil {
+				failf("Error updating task: %v\n", err)
+				return
+			}
+
+			index := len(parseAcceptance(t.Body))
+			fmt.Printf("Added acceptance criterion %d to task %d\n", index, id)
+		},
+	}
+}
+
+// create the acceptance rm subcommand
+func newAcceptanceRmCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "rm [id] [index]",
+		Aliases: []string{"remove"},
+		Short:   "Remove an acceptance criterion from a task by index",
+		Args:    cobra.ExactArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			id, err := strconv.Atoi(args[0])
+			if err != nil {
+				failf("Invalid task ID: %v\n", err)
+				return
+			}
+			index, err := strconv.Atoi(args[1])
+			if err != nil || index < 1 {
+				failf("Invalid check index: %s (must be 1 or greater)\n", args[1])
+				return
+			}
+
+			taskPath, err := findTaskFile(id)
+			if err != nil {
+				if printNotPunchlistError(err) {
+					return
+				}
+				failf("Error finding task: %v\n", err)
+				return
+			}
+
+			t, err := task.Parse(taskPath)
+			if err != nil {
+				failf("Error parsing task: %v\n", err)
+				return
+			}
+
+			newBody, removedText, err := removeAcceptanceItem(t.Body, index)
+			if err != nil {
+				failf("Error: %v\n", err)
+				return
+			}
+
+			t.Body = newBody
+			t.UpdatedAt = time.Now()
+			if err := t.Write(taskPath); err != nil {
+				failf("Error updating task: %v\n", err)
+				return
+			}
+
+			fmt.Printf("Removed acceptance criterion %d from task %d: %s\n", index, id, removedText)
+		},
+	}
+}
+
+// append a checkbox to ## Acceptance, creating the section if needed.
+// A new section lands before ## Notes and ## Log so criteria stay with
+// the task description, mirroring addNote's placement logic.
+func addAcceptanceItem(body, text string) string {
+	entry := fmt.Sprintf("- [ ] %s", text)
+
+	before, section, after, found := splitSection(body, "## Acceptance")
+	if found {
+		section = strings.TrimRight(section, "\n") + "\n" + entry
+		return joinBlocks(before, section, after)
+	}
+
+	newSection := "## Acceptance\n\n" + entry
+
+	preBody, logSection, afterLog, logFound := splitSection(body, "## Log")
+	if logFound {
+		preBody = joinBlocks(preBody, afterLog)
+	}
+
+	beforeNotes, notesSection, afterNotes, notesFound := splitSection(preBody, "## Notes")
+	var newPreBody string
+	if notesFound {
+		newPreBody = joinBlocks(beforeNotes, newSection, notesSection, afterNotes)
+	} else {
+		newPreBody = joinBlocks(preBody, newSection)
+	}
+	if logFound {
+		return joinBlocks(newPreBody, logSection)
+	}
+	return newPreBody
+}
+
+// remove the nth checkbox from ## Acceptance.
+// Returns the new body, the removed criterion text, and any error.
+func removeAcceptanceItem(body string, targetIndex int) (string, string, error) {
+	before, section, after, found := splitSection(body, "## Acceptance")
+	if !found {
+		return "", "", fmt.Errorf("no ## Acceptance section found")
+	}
+
+	lines := strings.Split(section, "\n")
+	checkIndex := 0
+	removedText := ""
+	removed := false
+
+	for i, line := range lines {
+		match := acceptanceCheckboxRe.FindStringSubmatch(strings.TrimSpace(line))
+		if match == nil {
+			continue
+		}
+		checkIndex++
+		if checkIndex != targetIndex {
+			continue
+		}
+		removedText = match[2]
+		lines = append(lines[:i], lines[i+1:]...)
+		removed = true
+		break
+	}
+
+	if !removed {
+		return "", "", fmt.Errorf("check index %d not found (found %d items)", targetIndex, checkIndex)
+	}
+
+	newSection := strings.Join(lines, "\n")
+	newBody := joinBlocks(before, newSection, after)
+	return newBody, removedText, nil
 }
 
 // create the check command
@@ -96,12 +265,12 @@ func newCheckCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Invalid task ID: %v\n", err)
+				failf("Invalid task ID: %v\n", err)
 				return
 			}
 			index, err := strconv.Atoi(args[1])
 			if err != nil || index < 1 {
-				fmt.Fprintf(os.Stderr, "Invalid check index: %s (must be 1 or greater)\n", args[1])
+				failf("Invalid check index: %s (must be 1 or greater)\n", args[1])
 				return
 			}
 
@@ -110,26 +279,26 @@ func newCheckCmd() *cobra.Command {
 				if printNotPunchlistError(err) {
 					return
 				}
-				fmt.Fprintf(os.Stderr, "Error finding task: %v\n", err)
+				failf("Error finding task: %v\n", err)
 				return
 			}
 
 			t, err := task.Parse(taskPath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error parsing task: %v\n", err)
+				failf("Error parsing task: %v\n", err)
 				return
 			}
 
 			newBody, nowChecked, err := toggleAcceptanceCheck(t.Body, index)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				failf("Error: %v\n", err)
 				return
 			}
 
 			t.Body = newBody
 			t.UpdatedAt = time.Now()
 			if err := t.Write(taskPath); err != nil {
-				fmt.Fprintf(os.Stderr, "Error updating task: %v\n", err)
+				failf("Error updating task: %v\n", err)
 				return
 			}
 

@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -86,6 +88,76 @@ func TestSplitSection(t *testing.T) {
 			t.Errorf("expected all empty, got before=%q section=%q after=%q", before, section, after)
 		}
 	})
+
+	// pin #28: prose that merely MENTIONS a heading must not split there.
+	// Specimen: tasks/021 — an acceptance criterion naming "## Notes or
+	// ## Log" mid-sentence was carved into fake sections by a later note.
+	t.Run("heading text mid-line is not a section boundary", func(t *testing.T) {
+		body := "# Title\n\n## Acceptance\n\n- [ ] must not touch ## Notes or ## Log sections\n\n## Log\n\n- 2026-01-01T00:00:00Z: Created task"
+		before, section, after, found := splitSection(body, "## Notes")
+		if found {
+			t.Fatalf("expected mid-line mention not to match, got section=%q", section)
+		}
+		if before != body || section != "" || after != "" {
+			t.Error("expected body returned untouched when heading only appears mid-line")
+		}
+
+		_, section, _, found = splitSection(body, "## Log")
+		if !found {
+			t.Fatal("expected the real ## Log line to be found")
+		}
+		if !strings.Contains(section, "Created task") {
+			t.Errorf("expected the real Log section, got %q", section)
+		}
+	})
+
+	t.Run("heading line with trailing text is not a boundary", func(t *testing.T) {
+		body := "## Notes or otherwise\n\ncontent\n\n## Notes\n\n- real note"
+		_, section, _, found := splitSection(body, "## Notes")
+		if !found {
+			t.Fatal("expected the exact heading line to be found")
+		}
+		if !strings.Contains(section, "real note") {
+			t.Errorf("expected match on the exact heading line only, got %q", section)
+		}
+	})
+}
+
+// End-to-end regression for pin #28: the exact command sequence that
+// produced specimen tasks/021 must leave section structure intact.
+func TestAcceptanceCriterionNamingSectionsSurvivesNote(t *testing.T) {
+	teardown := setupTest(t)
+	defer teardown()
+
+	if _, err := executeCommand("init"); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	if _, err := executeCommand("todo", "--ticket", "ticket under test"); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	criterion := "pin section replaces one section without touching ## Notes or ## Log (append-only)"
+	if _, err := executeCommand("acceptance", "add", "1", criterion); err != nil {
+		t.Fatalf("acceptance add: %v", err)
+	}
+	if _, err := executeCommand("note", "1", "a note after the heading-naming criterion"); err != nil {
+		t.Fatalf("note: %v", err)
+	}
+
+	tasksDir := "tasks"
+	name := firstMarkdown(t, tasksDir)
+	raw, err := os.ReadFile(filepath.Join(tasksDir, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+	for _, heading := range []string{"\n## Log", "\n## Notes", "\n## Acceptance"} {
+		if got := strings.Count(body, heading+"\n"); got != 1 {
+			t.Errorf("expected exactly one %q section, got %d\n%s", strings.TrimSpace(heading), got, body)
+		}
+	}
+	if !strings.Contains(body, criterion) {
+		t.Error("expected the criterion text preserved verbatim")
+	}
 }
 
 func TestAppendEntry(t *testing.T) {

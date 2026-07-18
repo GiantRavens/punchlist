@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"punchlist/config"
 	"punchlist/task"
@@ -22,7 +21,7 @@ func newDepsCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			id, err := strconv.Atoi(args[0])
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Invalid task ID: %v\n", err)
+				failf("Invalid task ID: %v\n", err)
 				return
 			}
 
@@ -31,13 +30,13 @@ func newDepsCmd() *cobra.Command {
 				if printNotPunchlistError(err) {
 					return
 				}
-				fmt.Fprintf(os.Stderr, "Error finding task: %v\n", err)
+				failf("Error finding task: %v\n", err)
 				return
 			}
 
 			t, err := task.Parse(taskPath)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error parsing task: %v\n", err)
+				failf("Error parsing task: %v\n", err)
 				return
 			}
 

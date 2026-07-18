@@ -26,7 +26,7 @@ func newLsCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			stateCatalog, err := loadStateCatalog()
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error loading state config: %v\n", err)
+				failf("Error loading state config: %v\n", err)
 				return
 			}
 			// read filter and sort flags
@@ -43,17 +43,29 @@ func newLsCmd() *cobra.Command {
 			lsReady, _ := cmd.Flags().GetBool("ready")
 			lsChunk, _ := cmd.Flags().GetInt("chunk")
 			lsPage, _ := cmd.Flags().GetInt("page")
+			lsLimit, _ := cmd.Flags().GetInt("limit")
 
-			if lsPage < 1 {
-				fmt.Fprintln(os.Stderr, "Error: --page must be >= 1")
+			if lsLimit < 0 {
+				failf("Error: --limit must be >= 0\n")
 				return
 			}
 			if lsChunk < 0 {
-				fmt.Fprintln(os.Stderr, "Error: --chunk must be >= 0")
+				failf("Error: --chunk must be >= 0\n")
+				return
+			}
+			if lsLimit > 0 && lsChunk > 0 && lsLimit != lsChunk {
+				failf("Error: --limit and --chunk both set with different values (use one)\n")
+				return
+			}
+			if lsChunk == 0 && lsLimit > 0 {
+				lsChunk = lsLimit
+			}
+			if lsPage < 1 {
+				failf("Error: --page must be >= 1\n")
 				return
 			}
 			if lsChunk == 0 && lsPage > 1 {
-				fmt.Fprintln(os.Stderr, "Error: --page requires --chunk")
+				failf("Error: --page requires --limit or --chunk\n")
 				return
 			}
 			orderSelectionCount := 0
@@ -67,7 +79,7 @@ func newLsCmd() *cobra.Command {
 				orderSelectionCount++
 			}
 			if orderSelectionCount > 1 {
-				fmt.Fprintln(os.Stderr, "Error: use only one of --by-priority, --by-date, or --by-date-reverse")
+				failf("Error: use only one of --by-priority, --by-date, or --by-date-reverse\n")
 				return
 			}
 			if lsByPriority {
@@ -91,7 +103,7 @@ func newLsCmd() *cobra.Command {
 					if printNotPunchlistError(err) {
 						return
 					}
-					fmt.Fprintf(os.Stderr, "Error locating tasks: %v\n", err)
+					failf("Error locating tasks: %v\n", err)
 					return
 				}
 				tasksPath = filepath.Join(root, "tasks")
@@ -101,7 +113,7 @@ func newLsCmd() *cobra.Command {
 					if printNotPunchlistError(err) {
 						return
 					}
-					fmt.Fprintf(os.Stderr, "Error locating tasks: %v\n", err)
+					failf("Error locating tasks: %v\n", err)
 					return
 				}
 			}
@@ -115,12 +127,12 @@ func newLsCmd() *cobra.Command {
 			if stateToken == "" {
 				stateToken = lsStatus
 			} else if lsStatus != "" && !strings.EqualFold(lsState, lsStatus) {
-				fmt.Fprintln(os.Stderr, "Error: state provided twice (use either --state or --status)")
+				failf("Error: state provided twice (use either --state or --status)\n")
 				return
 			}
 			if stateToken != "" && len(remainingArgs) > 0 {
 				if !strings.EqualFold(stateToken, remainingArgs[0]) {
-					fmt.Fprintln(os.Stderr, "Error: state provided twice (use either --state or positional state)")
+					failf("Error: state provided twice (use either --state or positional state)\n")
 					return
 				}
 			}
@@ -174,7 +186,7 @@ func newLsCmd() *cobra.Command {
 			})
 
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error listing tasks: %v\n", err)
+				failf("Error listing tasks: %v\n", err)
 				return
 			}
 
@@ -206,7 +218,7 @@ func newLsCmd() *cobra.Command {
 
 			if jsonOutput {
 				if err := marshalTaskList(tasks); err != nil {
-					fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+					failf("Error encoding JSON: %v\n", err)
 				}
 				return
 			}
@@ -258,8 +270,9 @@ func newLsCmd() *cobra.Command {
 	cmd.Flags().Bool("by-priority", false, "Sort by priority (lowest number first)")
 	cmd.Flags().Bool("by-date", false, "Sort by updated date (oldest first)")
 	cmd.Flags().Bool("by-date-reverse", false, "Sort by updated date (newest first)")
-	cmd.Flags().Int("chunk", 0, "Limit output to N tasks per page (0 means all)")
-	cmd.Flags().Int("page", 1, "1-based page number when using --chunk")
+	cmd.Flags().Int("limit", 0, "Limit output to N tasks (0 means all)")
+	cmd.Flags().Int("chunk", 0, "Alias for --limit")
+	cmd.Flags().Int("page", 1, "1-based page number when using --limit")
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	cmd.Flags().Bool("ready", false, "Show only tasks whose dependencies are all done")
 
