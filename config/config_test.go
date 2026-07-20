@@ -20,8 +20,37 @@ func TestFindPunchlistDir(t *testing.T) {
 		if err != nil {
 			t.Errorf("Expected to find .punchlist dir, but got error: %v", err)
 		}
-		if foundDir != punchlistDir {
-			t.Errorf("Expected dir %s, but got %s", punchlistDir, foundDir)
+		// TempDir itself may sit behind symlinks (macOS /var -> /private/var)
+		want, _ := filepath.EvalSymlinks(punchlistDir)
+		if foundDir != want {
+			t.Errorf("Expected dir %s, but got %s", want, foundDir)
+		}
+	})
+
+	// symlinked store: an engine-side convenience link must resolve to the
+	// real store, or WalkDir lists zero tasks and mkdir forks a parallel store
+	t.Run("resolves symlinked .punchlist to the real store", func(t *testing.T) {
+		root := t.TempDir()
+		realScope := filepath.Join(root, "state", "myforge")
+		realStore := filepath.Join(realScope, PunchlistDir)
+		if err := os.MkdirAll(realStore, 0755); err != nil {
+			t.Fatalf("Failed to create real store: %v", err)
+		}
+		aliasScope := filepath.Join(root, "code", "myforge")
+		if err := os.MkdirAll(aliasScope, 0755); err != nil {
+			t.Fatalf("Failed to create alias scope: %v", err)
+		}
+		if err := os.Symlink(realStore, filepath.Join(aliasScope, PunchlistDir)); err != nil {
+			t.Fatalf("Failed to create symlink: %v", err)
+		}
+
+		foundDir, err := findPunchlistDir(aliasScope)
+		if err != nil {
+			t.Fatalf("Expected to find symlinked .punchlist, but got error: %v", err)
+		}
+		want, _ := filepath.EvalSymlinks(realStore)
+		if foundDir != want {
+			t.Errorf("Expected resolved store %s, but got %s", want, foundDir)
 		}
 	})
 

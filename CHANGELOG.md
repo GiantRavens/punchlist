@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.4
+- Symlinked stores now resolve to their real location: `findPunchlistDir` runs `EvalSymlinks` on the `.punchlist` it finds, and task creation (`FindAcceptingRootFrom`) returns the resolved root. Previously a scope reached through a convenience symlink (e.g. `code/forge/<forge>/.punchlist` → `forge/state/<forge>/.punchlist`) listed ZERO tasks — `filepath.WalkDir` never descends a symlinked `tasks/` — while trash and creation quietly forked parallel real `tasks/`/`.trash/` dirs beside the links (two tasks were stranded that way in the forge fleet before this fix). All nine WalkDir call sites inherit the resolution from the single discovery point. Regression test covers the symlinked-store case.
+- MCP discovery dedupes symlink-aliased stores: a `.punchlist` that resolves elsewhere under the served root is skipped as an alias — the store registers once, under its canonical path (a store resolving *outside* the root keeps its alias entry). Previously each aliased store surfaced as two domains with identical counts, double-counting in cross-domain rollups.
+
 ## 1.3.3
 - `pin doctor` learns `loose_list` — a new info-severity, fixable check detecting Log/Notes sections whose entries are separated by blank lines (the pre-1.3.2 loose emission). `--fix` tightens them in place, preserving every entry and indented continuation lines, via the same byte-preserving section rewrite as duplicate merges (now unified as `tightenSection`, idempotent across combined defects). Info findings are cosmetic: they never drive the non-zero exit status, which now fires only for remaining error/warning findings. Report ordering is error > warning > info.
 

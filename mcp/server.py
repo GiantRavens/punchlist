@@ -344,6 +344,21 @@ class PunchlistWorkspace:
 
             domain_config_path = dp / ".punchlist" / "config.yaml"
             if domain_config_path.exists():
+                # Dedupe symlink-aliased stores (engine-side convenience links
+                # into the state tier): if .punchlist resolves to a store that
+                # really lives elsewhere under the root, this path is an alias —
+                # skip it; the canonical location registers under its real path.
+                store_root = (dp / ".punchlist").resolve().parent
+                if store_root != dp.resolve():
+                    try:
+                        store_root.relative_to(self.root.resolve())
+                        dirnames[:] = [
+                            d for d in dirnames
+                            if d not in ("tasks", ".punchlist", ".trash")
+                        ]
+                        continue
+                    except ValueError:
+                        pass  # store lives outside the root: keep the alias
                 with open(domain_config_path) as f:
                     domain_config = yaml.safe_load(f) or {}
                 # Merge: domain config overrides root config

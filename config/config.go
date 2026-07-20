@@ -75,6 +75,13 @@ func findPunchlistDir(startDir string) (string, error) {
 	punchlistPath := filepath.Join(startDir, PunchlistDir)
 	info, err := os.Stat(punchlistPath)
 	if err == nil && info.IsDir() {
+		// resolve a symlinked store (engine-side convenience links into the
+		// state tier) so root, tasks/, and .trash/ all derive from the real
+		// store — WalkDir does not descend into symlinked dirs, and mkdir
+		// beside the symlink would fork a parallel store
+		if resolved, rerr := filepath.EvalSymlinks(punchlistPath); rerr == nil {
+			return resolved, nil
+		}
 		return punchlistPath, nil
 	}
 	if err != nil && !os.IsNotExist(err) {
@@ -118,7 +125,7 @@ func FindAcceptingRootFrom(startDir string) (string, []string, error) {
 				return "", skipped, cfgErr
 			}
 			if cfg.IsAccepting() {
-				return dir, skipped, nil
+				return filepath.Dir(punchlistPath), skipped, nil
 			}
 			skipped = append(skipped, dir)
 		} else if dir == startAbs {
