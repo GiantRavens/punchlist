@@ -163,12 +163,6 @@ func createTaskInCwd(args []string, ticket bool) (*task.Task, error) {
 	fullTitle := title
 	title = truncateWithEllipsis(fullTitle, titleMaxLenFromConfig(cfg))
 
-	id := cfg.NextID
-	// build file path
-	slug := slugify(title)
-	idWidth := idWidthFromConfig(cfg)
-	filename := fmt.Sprintf("%0*d-%s.md", idWidth, id, slug)
-
 	tasksPath, err := tasksDir()
 	if err != nil {
 		return nil, err
@@ -176,6 +170,28 @@ func createTaskInCwd(args []string, ticket bool) (*task.Task, error) {
 	if err := os.MkdirAll(tasksPath, 0755); err != nil {
 		return nil, fmt.Errorf("error creating tasks directory: %w", err)
 	}
+
+	// next_id is a CACHE, not the authority — the ids on disk are.
+	//
+	// When a .punchlist is shared between machines (Syncthing, a network
+	// share, a restored backup), config.yaml is a single contended counter:
+	// two hosts allocate from divergent views of it, the file conflicts, and
+	// both hand out the same id. Observed in the wild in notebook/forge/ —
+	// config.yaml at next_id 13 beside a sync-conflict copy at 12, with ids
+	// 10 and 11 each claimed by two tasks and one filename mangled into
+	// "011-010-<slug>.md". `pin doctor` already NAMES this (next_id_drift,
+	// "future id collision") but only after the damage; taking the floor from
+	// disk prevents it instead, and lets a diverged store self-heal on the
+	// next create.
+	id := cfg.NextID
+	if floor := maxOnDiskID(tasksPath) + 1; floor > id {
+		id = floor
+	}
+
+	// build file path
+	slug := slugify(title)
+	idWidth := idWidthFromConfig(cfg)
+	filename := fmt.Sprintf("%0*d-%s.md", idWidth, id, slug)
 	filePath := filepath.Join(tasksPath, filename)
 
 	// assemble the task object
@@ -203,13 +219,66 @@ func createTaskInCwd(args []string, ticket bool) (*task.Task, error) {
 		return nil, fmt.Errorf("error writing task file: %w", err)
 	}
 
-	// increment and save the next id
-	cfg.NextID++
+	// advance past the id we actually used, not merely past the cached one —
+	// otherwise a store that healed forward would re-issue the same id next time
+	cfg.NextID = id + 1
 	if err := config.SaveConfig(cfg); err != nil {
 		return nil, fmt.Errorf("error saving config: %w", err)
 	}
 
 	return newTask, nil
+}
+
+// maxOnDiskID reports the highest task id visible on disk, read from filename
+// prefixes rather than parsed frontmatter: one readdir per directory, no file
+// reads, so it stays cheap on the create path even for a 500-task scope. pin
+// writes the id into the filename itself, so the prefix is a sound floor.
+//
+// .trash is included deliberately. A deleted task keeps its id, and reissuing
+// it would collide the moment that file is restored or inspected.
+func maxOnDiskID(tasksPath string) int {
+	max := 0
+	scan := func(dir string) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return // absent or unreadable: contributes no floor
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+				continue
+			}
+			if n := leadingTaskID(e.Name()); n > max {
+				max = n
+			}
+		}
+	}
+	scan(tasksPath)
+	if trash, err := trashDir(); err == nil {
+		scan(trash)
+	}
+	return max
+}
+
+// leadingTaskID pulls the id off a "<id>-<slug>.md" filename, 0 if absent.
+// Stops at the first non-digit, so "011-010-keep-media-title.md" reads 11 —
+// the id pin assigned — not the 010 embedded in the mangled slug.
+func leadingTaskID(name string) int {
+	n := 0
+	digits := 0
+	for _, r := range name {
+		if r < '0' || r > '9' {
+			break
+		}
+		n = n*10 + int(r-'0')
+		digits++
+		if digits > 9 { // absurd prefix; not an id
+			return 0
+		}
+	}
+	if digits == 0 {
+		return 0
+	}
+	return n
 }
 
 // choose a safe id width from config or defaults
