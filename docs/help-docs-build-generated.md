@@ -88,6 +88,7 @@ pin, punchlist
 | `confirm` | Mark a task as needing confirmation |
 | `del` | Move a task to the trash |
 | `deps` | Show dependencies for a task |
+| `doctor` | Check task files for semantic problems (and repair safe ones with --fix) |
 | `done` | Complete a task |
 | `due` | Set or change a task due date |
 | `edit` | Open a task in your editor |
@@ -102,7 +103,8 @@ pin, punchlist
 | `show` | Show a task in detail |
 | `start` | Start a task |
 | `tag` | Add tags to one or more tasks |
-| `todo` | Move a task back to TODO |
+| `todo` | Move a task back to TODO, or create one (use --ticket for a Problem/Approach/Acceptance scaffold) |
+| `version` | Print the pin version |
 
 ## Flags
 
