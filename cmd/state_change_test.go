@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"path/filepath"
+	"punchlist/config"
 	"punchlist/task"
 	"strings"
 	"testing"
@@ -109,4 +110,54 @@ func TestUpdateTaskStateIntegration(t *testing.T) {
 	if !strings.Contains(tsk.Body, "State changed from TODO to DONE") {
 		t.Error("expected state change log entry in body")
 	}
+}
+
+// TestUnknownStateRefusal covers pin#42: a bare word that is NOT a known state
+// token must be refused (never minted into an arbitrary state and applied).
+func TestUnknownStateRefusal(t *testing.T) {
+	catalog := config.DefaultStateCatalog()
+
+	t.Run("known tokens resolve; the dispatch gate would apply them", func(t *testing.T) {
+		for _, tok := range []string{"done", "DONE", "begun", "started", "todo", "block"} {
+			if _, ok := catalog.Resolve(tok); !ok {
+				t.Errorf("expected %q to resolve as a known state token", tok)
+			}
+		}
+	})
+
+	t.Run("unknown tokens do NOT resolve (the dispatch gate refuses)", func(t *testing.T) {
+		// `get` is the reported specimen: `pin get 178` minted a GET state. It is a
+		// read verb, never a state, and must not resolve.
+		for _, tok := range []string{"get", "show", "view", "help", "banana", "gett"} {
+			if _, ok := catalog.Resolve(tok); ok {
+				t.Errorf("expected %q to be UNKNOWN (must not resolve to a state)", tok)
+			}
+		}
+	})
+
+	t.Run("refusal message names the token, suggests show for read verbs, lists states", func(t *testing.T) {
+		msg := unknownStateMessage("get", []string{"178"}, catalog)
+		if !strings.Contains(msg, `"get"`) {
+			t.Errorf("message should name the offending token: %q", msg)
+		}
+		if !strings.Contains(msg, "pin show 178") {
+			t.Errorf("read verb 'get' should suggest 'pin show 178': %q", msg)
+		}
+		if !strings.Contains(msg, "done") || !strings.Contains(msg, "todo") {
+			t.Errorf("message should list valid states: %q", msg)
+		}
+		if !strings.Contains(msg, "pin todo") {
+			t.Errorf("message should offer explicit task creation as the alternative: %q", msg)
+		}
+	})
+
+	t.Run("non-read unknown token still refuses but omits the show suggestion", func(t *testing.T) {
+		msg := unknownStateMessage("banana", []string{"1", "2"}, catalog)
+		if strings.Contains(msg, "Did you mean:  pin show") {
+			t.Errorf("non-read token should not suggest 'pin show': %q", msg)
+		}
+		if !strings.Contains(msg, `"banana"`) {
+			t.Errorf("message should still name the token: %q", msg)
+		}
+	})
 }

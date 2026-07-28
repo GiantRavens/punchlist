@@ -125,7 +125,16 @@ func Execute() {
 					fmt.Fprintf(os.Stderr, "Error loading state config: %v\n", err)
 					os.Exit(1)
 				}
-				newState := task.State(stateCatalog.Canonicalize(args[0]))
+				// pin#42: `pin <word> <ids>` is a state change ONLY when <word> is a KNOWN
+				// state token. An unknown word (e.g. `pin get 486`) must NOT be minted into
+				// an arbitrary state and applied — that silently moved real tasks into a bogus
+				// "GET" state. Refuse loudly and suggest the likely intent instead.
+				canonical, known := stateCatalog.Resolve(args[0])
+				if !known {
+					fmt.Fprint(os.Stderr, unknownStateMessage(args[0], args[1:], stateCatalog))
+					os.Exit(1)
+				}
+				newState := task.State(canonical)
 				rootDir, err := config.FindPunchlistRoot()
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Error resolving punchlist scope: %v\n", err)
@@ -181,4 +190,38 @@ func isSubcommand(root *cobra.Command, name string) bool {
 // ignore cobra completion shim commands during implicit creation
 func isCobraCompletionCmd(name string) bool {
 	return name == "__complete" || name == "__completeNoDesc"
+}
+
+// unknownStateMessage builds the pin#42 refusal shown when `pin <word> <ids>` names
+// a word that is NOT a known state token. It never mutates tasks — it explains why
+// and points at the likely intent (a read verb like `get`/`show` almost always meant
+// `pin show`), then lists the valid state tokens.
+func unknownStateMessage(token string, idArgs []string, catalog *config.StateCatalog) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Refusing: %q is not a known state, so it will not be applied to task(s) %s.\n",
+		token, strings.Join(idArgs, " "))
+	// A read-ish verb almost certainly meant `pin show`.
+	switch strings.ToLower(strings.TrimSpace(token)) {
+	case "get", "show", "view", "see", "info", "read", "open", "cat", "inspect":
+		fmt.Fprintf(&b, "  Did you mean:  pin show %s\n", strings.Join(idArgs, " "))
+	}
+	if states := stateTokenList(catalog); states != "" {
+		fmt.Fprintf(&b, "  Valid states:  %s\n", states)
+	}
+	fmt.Fprintf(&b, "  To create a task with this title instead:  pin todo %q\n",
+		strings.Join(append([]string{token}, idArgs...), " "))
+	return b.String()
+}
+
+// stateTokenList returns the canonical state names (lowercased) in display order,
+// for the unknown-state error's "Valid states" line.
+func stateTokenList(catalog *config.StateCatalog) string {
+	if catalog == nil {
+		return ""
+	}
+	parts := []string{}
+	for _, st := range catalog.SortStates() {
+		parts = append(parts, strings.ToLower(st.Name))
+	}
+	return strings.Join(parts, ", ")
 }
