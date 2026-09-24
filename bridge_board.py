@@ -45,6 +45,7 @@ _LABELS = {
     "code/forge/research-forge": "rf", "forge/state/research-forge": "rf",
     "code/forge/index-forge": "if", "forge/state/index-forge": "if",
     "code/punchlist": "punchlist", "work/quantum": "quantum",
+    "work/velvet": "velvet-work",   # code/velvet keeps the bare "velvet" label
 }
 
 _FM_RE = re.compile(
@@ -231,7 +232,11 @@ def _ago(ts: float, now: float) -> str:
 
 
 def section() -> str:
-    """The bridge section html (styles live in status.py's sheet)."""
+    """The bridge section html — one .taskline plus the full board behind a fold
+    (bridge redesign-2026-07 step 5: the 16-tile grid was a second application on
+    the home page; totals + hotspots stay at a glance, depth folds on demand).
+    The .pstrip recent-activity ticker is retired from home — /log carries it.
+    Component styles (.taskline, details.fold) live in the bridge chassis."""
     e = _html.escape
     d = gather()
     if d.get("building"):
@@ -239,6 +244,19 @@ def section() -> str:
                 "<div class=dim>task board building in background — next refresh has it</div>")
     if not d["cards"]:
         return ""
+    tot_todo = sum(c["todo"] for c in d["cards"])
+    tot_begun = sum(c["begun"] for c in d["cards"])
+    tot_stale = sum(c["stale"] for c in d["cards"])
+    tot_done7 = sum(c["done7"] for c in d["cards"])
+    hot = " · ".join(                       # cards arrive sorted by open count
+        f"<a href=\"/punchlists/{e(c['id'])}\">{e(c['label'])} <b>{c['todo'] + c['begun']}</b></a>"
+        for c in d["cards"][:4])
+    stale_part = (f" · <span class=pstale>{tot_stale} stale-begun ⚠</span>"
+                  if tot_stale else "")
+    line = (f"<div class=taskline><b>{tot_todo}</b> todo · "
+            f"<b class=pbegun>{tot_begun}</b> begun{stale_part} · "
+            f"<span class=pdone>{tot_done7} done/7d</span>"
+            f"<span class=tsep>·</span>{hot}</div>")
     cards = []
     for c in d["cards"]:
         tcls = "down" if c["delta"] < 0 else ("up" if c["delta"] > 0 else "")
@@ -251,13 +269,10 @@ def section() -> str:
             f" <span class='trend {tcls}'>{c['trend']}</span></div>"
             f"<div class=pcnt><b>{c['todo']}</b> todo{begun}{stale}"
             f" · <span class=pdone>{c['done7']} done/7d</span></div>{top}</a>")
-    strip = " &nbsp;·&nbsp; ".join(
-        f"<span class=page>{_ago(r['ts'], d['now'])}</span> {e(r['label'])}#{e(str(r['id']))} "
-        f"<span class='pst {r['state']}'>{e(r['state'])}</span> {e(r['title'])}"
-        for r in d["recent"])
-    strip_html = f"<div class=pstrip>{strip}</div>" if strip else ""
     quiet = (f"<div class=pquiet>+ {d['quiet_n']} quiet context(s) holding "
              f"{d['quiet_open']} open task(s) — <code>pin ls</code> in each</div>"
              if d.get("quiet_n") else "")
     return (f"<div class=sec id=tasks>punchlists <span class=secnum>03-1701</span></div>"
-            f"<div class=pgrid>{''.join(cards)}</div>{quiet}{strip_html}")
+            f"{line}"
+            f"<details class=fold><summary>full board — {len(d['cards'])} active context(s)</summary>"
+            f"<div class=pgrid>{''.join(cards)}</div>{quiet}</details>")
