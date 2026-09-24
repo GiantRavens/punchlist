@@ -71,7 +71,7 @@ func newTodoCmd() *cobra.Command {
 		Use:     "todo [id]",
 		Aliases: []string{"TODO"},
 		Short:   "Move a task back to TODO, or create one (use --ticket for a Problem/Approach/Acceptance scaffold)",
-		Args: cobra.MinimumNArgs(1),
+		Args:    cobra.MinimumNArgs(1),
 		// Allow titles that begin with `--` (e.g. `pin todo "--rerun the orca cycle"`)
 		// to pass through cobra's flag parser as plain args. State-creation commands
 		// take only IDs and titles; no command-specific flags. `pin <verb> --help`
@@ -103,7 +103,7 @@ func newStartCmd() *cobra.Command {
 		Use:     "start [id]",
 		Aliases: []string{"begun", "BEGUN", "START"},
 		Short:   "Start a task",
-		Args: cobra.MinimumNArgs(1),
+		Args:    cobra.MinimumNArgs(1),
 		// Allow titles that begin with `--` (e.g. `pin todo "--rerun the orca cycle"`)
 		// to pass through cobra's flag parser as plain args. State-creation commands
 		// take only IDs and titles; no command-specific flags. `pin <verb> --help`
@@ -136,7 +136,7 @@ func newDoneCmd() *cobra.Command {
 		Use:     "done [id]",
 		Aliases: []string{"DONE"},
 		Short:   "Complete a task",
-		Args: cobra.MinimumNArgs(1),
+		Args:    cobra.MinimumNArgs(1),
 		// Allow titles that begin with `--` (e.g. `pin todo "--rerun the orca cycle"`)
 		// to pass through cobra's flag parser as plain args. State-creation commands
 		// take only IDs and titles; no command-specific flags. `pin <verb> --help`
@@ -237,13 +237,17 @@ func isAllDigits(token string) bool {
 	return true
 }
 
-// create the notdo/defer command
-func newDeferCmd() *cobra.Command {
+// create the notdo command. `defer` is NOT an alias: DEFER is its own state
+// (parked, may come back) and NOTDO is a terminal verdict (won't do). Until
+// pin#45 (2026-09-24) `pin defer N` silently wrote NOTDO — the cobra alias
+// shadowed the catalog's DEFER token before the generic `pin <STATE> <ids>`
+// path could resolve it.
+func newNotDoCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "notdo [id]",
-		Aliases: []string{"defer", "DEFER", "NOTDO"},
+		Aliases: []string{"NOTDO"},
 		Short:   "Mark a task as not to do",
-		Args: cobra.MinimumNArgs(1),
+		Args:    cobra.MinimumNArgs(1),
 		// Allow titles that begin with `--` (e.g. `pin todo "--rerun the orca cycle"`)
 		// to pass through cobra's flag parser as plain args. State-creation commands
 		// take only IDs and titles; no command-specific flags. `pin <verb> --help`
@@ -270,13 +274,63 @@ func newDeferCmd() *cobra.Command {
 	}
 }
 
+// create the defer command: park a task (state DEFER) without closing it.
+// The target state is resolved through the project's state catalog so a
+// config that spells DEFER differently (or lacks it) fails loudly rather
+// than minting a state the catalog does not know.
+func newDeferCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:                "defer [id]",
+		Aliases:            []string{"DEFER", "park", "PARK"},
+		Short:              "Park a task as deferred (DEFER — not closed, may come back)",
+		Args:               cobra.MinimumNArgs(1),
+		DisableFlagParsing: true,
+		Run: func(cmd *cobra.Command, args []string) {
+			if handleHelpFlag(cmd, args) {
+				return
+			}
+			target, err := resolveConfiguredState(string(task.StateDefer))
+			if err != nil {
+				failf("%v\n", err)
+				return
+			}
+			ids, err := parseTaskIDs(args)
+			if err != nil {
+				if shouldCreateStateFromArgs(args) {
+					if err := createTaskFromArgs(append([]string{string(target)}, args...)); err != nil {
+						failf("Failed to create deferred task: %v\n", err)
+					}
+					return
+				}
+				failf("Invalid task IDs: %v\n", err)
+				return
+			}
+			updateTaskState(ids, target)
+		},
+	}
+}
+
+// resolveConfiguredState maps a canonical state token through the project's
+// state catalog, refusing tokens the catalog does not know.
+func resolveConfiguredState(token string) (task.State, error) {
+	catalog, err := loadStateCatalog()
+	if err != nil {
+		return "", fmt.Errorf("Error loading state config: %w", err)
+	}
+	canonical, known := catalog.Resolve(token)
+	if !known {
+		return "", fmt.Errorf("state %q is not configured for this punchlist (known: %s)", token, stateTokenList(catalog))
+	}
+	return task.State(canonical), nil
+}
+
 // create the block command
 func newBlockCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "block [id]",
 		Aliases: []string{"BLOCK", "waiting", "WAITING"},
 		Short:   "Change a task's status to BLOCKED",
-		Args: cobra.MinimumNArgs(1),
+		Args:    cobra.MinimumNArgs(1),
 		// Allow titles that begin with `--` (e.g. `pin todo "--rerun the orca cycle"`)
 		// to pass through cobra's flag parser as plain args. State-creation commands
 		// take only IDs and titles; no command-specific flags. `pin <verb> --help`
@@ -309,7 +363,7 @@ func newConfirmCmd() *cobra.Command {
 		Use:     "confirm [id]",
 		Aliases: []string{"CONFIRM", "followup", "FOLLOWUP", "review", "REVIEW"},
 		Short:   "Mark a task as needing confirmation",
-		Args: cobra.MinimumNArgs(1),
+		Args:    cobra.MinimumNArgs(1),
 		// Allow titles that begin with `--` (e.g. `pin todo "--rerun the orca cycle"`)
 		// to pass through cobra's flag parser as plain args. State-creation commands
 		// take only IDs and titles; no command-specific flags. `pin <verb> --help`

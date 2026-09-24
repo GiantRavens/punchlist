@@ -86,6 +86,7 @@ pin, punchlist
 | `compact` | Compact task IDs into a contiguous sequence |
 | `config` | Open the current configuration in your editor |
 | `confirm` | Mark a task as needing confirmation |
+| `defer` | Park a task as deferred (DEFER — not closed, may come back) |
 | `del` | Move a task to the trash |
 | `deps` | Show dependencies for a task |
 | `doctor` | Check task files for semantic problems (and repair safe ones with --fix) |

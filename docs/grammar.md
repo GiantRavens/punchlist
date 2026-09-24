@@ -127,6 +127,7 @@ pin block <ids>
 pin confirm <ids>
 pin followup <ids>
 pin notdo <ids>
+pin defer <ids>          # park (DEFER) — distinct from notdo; `pin defer "title"` creates one
 ```
 
 `<ids>` can be:

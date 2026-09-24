@@ -19,6 +19,7 @@ const (
 	StateTodo    State = "TODO"
 	StateBegun   State = "BEGUN"
 	StateNotDo   State = "NOTDO"
+	StateDefer   State = "DEFER"
 	StateDone    State = "DONE"
 	StateBlock   State = "BLOCK"
 	StateConfirm State = "CONFIRM"
@@ -33,6 +34,8 @@ func ParseState(input string) (State, bool) {
 		return StateBegun, true
 	case string(StateNotDo):
 		return StateNotDo, true
+	case string(StateDefer):
+		return StateDefer, true
 	case string(StateDone):
 		return StateDone, true
 	case string(StateBlock):
