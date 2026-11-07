@@ -30,38 +30,37 @@ type createOptions struct {
 // demand — both land after these sections. (pin #17, decision-0100.)
 const ticketScaffold = `## Problem
 
-(what's wrong + root cause + evidence — fill me in)
+(what's wrong + root cause + evidence — fill with ` + "`pin problem <id> \"...\"`" + `)
 
 ## Approach
 
-(the fix — fill me in)
+(the fix — fill with ` + "`pin approach <id> \"...\"`" + `)
 
 ## Acceptance
 
-- [ ] (testable post-condition that proves the fix durably landed — fill me in)`
-
-// stripTicketFlag pulls the --ticket boolean out of a free-form arg list,
-// returning the remaining args and whether the flag was present. State-
-// creation commands set DisableFlagParsing, so the flag arrives as a plain
-// token rather than being parsed by cobra; handling it here means --ticket
-// composes with every create path (todo/begun/done and implicit creation)
-// and with the existing pri/tags/due/state modifiers.
-func stripTicketFlag(args []string) ([]string, bool) {
-	ticket := false
-	out := args[:0:0]
-	for _, a := range args {
-		if a == "--ticket" {
-			ticket = true
-			continue
-		}
-		out = append(out, a)
-	}
-	return out, ticket
-}
+- [ ] (testable post-condition that proves the fix durably landed — add with ` + "`pin acceptance add <id> \"...\"`" + `)`
 
 // create a task from free-form args
 func createTaskFromArgs(args []string) error {
-	args, ticket := stripTicketFlag(args)
+	args, flags, err := parseCreateFlags(args)
+	if err != nil {
+		return err
+	}
+	// read and validate a --body-file before anything is allocated or locked,
+	// so a bad body creates no task (and stdin is read exactly once)
+	if flags.bodyFile != "" {
+		text, err := readTextSource(flags.bodyFile)
+		if err != nil {
+			return fmt.Errorf("--body-file: %w", err)
+		}
+		if strings.TrimSpace(text) == "" {
+			return fmt.Errorf("--body-file %s is empty", flags.bodyFile)
+		}
+		flags.bodyText = text
+	}
+	if _, err := composeTaskBody("check", flags); err != nil {
+		return err
+	}
 	targetPath, remaining := extractTargetPath(args)
 	if len(remaining) == 0 {
 		return fmt.Errorf("missing title")
@@ -94,16 +93,16 @@ func createTaskFromArgs(args []string) error {
 
 	return withProjectWriteLock(root, func() error {
 		if targetPath == "" && len(skipped) == 0 {
-			return createTaskFromArgsInDir(remaining, ticket)
+			return createTaskFromArgsInDir(remaining, flags)
 		}
 		return withWorkingDir(root, func() error {
-			return createTaskFromArgsInDir(remaining, ticket)
+			return createTaskFromArgsInDir(remaining, flags)
 		})
 	})
 }
 
-func createTaskFromArgsInDir(args []string, ticket bool) error {
-	newTask, err := createTaskInCwd(args, ticket)
+func createTaskFromArgsInDir(args []string, flags createFlags) error {
+	newTask, err := createTaskInCwd(args, flags)
 	if err != nil {
 		return err
 	}
@@ -114,7 +113,7 @@ func createTaskFromArgsInDir(args []string, ticket bool) error {
 // createTaskInCwd is the print-free creation core shared by the CLI and the
 // browse TUI (which cannot write to stdout mid-render). Callers must already
 // hold the project write lock.
-func createTaskInCwd(args []string, ticket bool) (*task.Task, error) {
+func createTaskInCwd(args []string, flags createFlags) (*task.Task, error) {
 	if len(args) == 0 {
 		return nil, fmt.Errorf("missing title")
 	}
@@ -207,12 +206,13 @@ func createTaskInCwd(args []string, ticket bool) (*task.Task, error) {
 		DependsOn: opts.depends,
 		Path:      filePath,
 	}
-	// use a default h1 body; --ticket seeds the Problem/Approach/Acceptance scaffold
-	if ticket {
-		newTask.Body = fmt.Sprintf("# %s\n\n%s\n", fullTitle, ticketScaffold)
-	} else {
-		newTask.Body = fmt.Sprintf("# %s\n", fullTitle)
+	// a default h1 body; --ticket seeds the Problem/Approach/Acceptance scaffold,
+	// and the fill flags (--problem/--approach/--acceptance/--body-file) author it
+	body, err := composeTaskBody(fullTitle, flags)
+	if err != nil {
+		return nil, err
 	}
+	newTask.Body = body
 	addLog(newTask, "Created task")
 
 	if err := newTask.Write(filePath); err != nil {

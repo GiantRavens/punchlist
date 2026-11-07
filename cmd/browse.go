@@ -396,7 +396,7 @@ func (m *model) createBrowseTask(input string) {
 	}
 	var created *task.Task
 	err := withProjectWriteLock(m.root, func() error {
-		t, err := createTaskInCwd(m.browseCreateArgs(input), false)
+		t, err := createTaskInCwd(m.browseCreateArgs(input), createFlags{})
 		if err != nil {
 			return err
 		}

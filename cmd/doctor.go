@@ -199,6 +199,12 @@ func runDoctor(fix bool) (*doctorReport, error) {
 			}
 		}
 
+		if unfilled := scaffoldUnfilledSections(t.Body); len(unfilled) > 0 {
+			flag("scaffold_unfilled", "info",
+				fmt.Sprintf("--ticket scaffold still has placeholder text in %s (fill with pin problem/approach/acceptance add)",
+					strings.Join(unfilled, ", ")), false)
+		}
+
 		if h1 := firstH1(t.Body); h1 != "" && t.Title != "" {
 			titleNorm := strings.TrimSuffix(strings.TrimSuffix(strings.TrimSpace(t.Title), "..."), "…")
 			if !strings.HasPrefix(h1, titleNorm) && !strings.HasPrefix(titleNorm, h1) {
@@ -270,6 +276,31 @@ func runDoctor(fix bool) (*doctorReport, error) {
 		return report.Findings[i].File < report.Findings[j].File
 	})
 	return report, nil
+}
+
+// scaffoldPlaceholderMarkers are substrings that appear ONLY in an unfilled
+// --ticket scaffold (the seeded prose and the self-documenting fill hints).
+// A section still containing one has not been authored yet.
+var scaffoldPlaceholderMarkers = []string{"fill me in", "fill with `pin", "add with `pin"}
+
+// scaffoldUnfilledSections reports which of ## Problem / ## Approach /
+// ## Acceptance still carry scaffold placeholder text. Only sections that
+// exist are considered, so a non-ticket task reports nothing.
+func scaffoldUnfilledSections(body string) []string {
+	var unfilled []string
+	for _, heading := range []string{"## Problem", "## Approach", "## Acceptance"} {
+		_, section, _, found := splitSection(body, heading)
+		if !found {
+			continue
+		}
+		for _, marker := range scaffoldPlaceholderMarkers {
+			if strings.Contains(section, marker) {
+				unfilled = append(unfilled, strings.TrimPrefix(heading, "## "))
+				break
+			}
+		}
+	}
+	return unfilled
 }
 
 func countHeadingLines(body, heading string) int {

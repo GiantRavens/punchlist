@@ -80,6 +80,7 @@ pin, punchlist
 | Command | Description |
 | --- | --- |
 | `acceptance` | List acceptance criteria for a task |
+| `approach` | Set the ## Approach section (shortcut for `pin section set <id> Approach`) |
 | `block` | Change a task's status to BLOCKED |
 | `browse` | Browse tasks in an interactive viewer |
 | `check` | Toggle an acceptance criterion checkbox |
@@ -98,12 +99,14 @@ pin, punchlist
 | `ls` | List tasks |
 | `meta` | View or set metadata on a task |
 | `notdo` | Mark a task as not to do |
-| `note` | Add a note to a task |
+| `note` | Add a note to a task (or `note ls`/`note rm`) |
 | `pri` | Set or clear the priority on one or more tasks (0 clears) |
+| `problem` | Set the ## Problem section (shortcut for `pin section set <id> Problem`) |
 | `search` | Search tasks by text |
+| `section` | Set or append prose in a task section (Problem, Approach, or any custom heading) |
 | `show` | Show a task in detail |
 | `start` | Start a task |
-| `tag` | Add tags to one or more tasks |
+| `tag` | Add tags to one or more tasks (or `tag set`/`tag rm`) |
 | `todo` | Move a task back to TODO, or create one (use --ticket for a Problem/Approach/Acceptance scaffold) |
 | `version` | Print the pin version |
 

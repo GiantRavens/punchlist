@@ -104,6 +104,9 @@ Zsh cwd hook snippet (optional, for prompt or env):
 	cmd.AddCommand(newMetaCmd())
 	cmd.AddCommand(newAcceptanceCmd())
 	cmd.AddCommand(newCheckCmd())
+	cmd.AddCommand(newSectionCmd())
+	cmd.AddCommand(newProblemCmd())
+	cmd.AddCommand(newApproachCmd())
 	cmd.AddCommand(newDepsCmd())
 
 	// keep completion available but hidden from help

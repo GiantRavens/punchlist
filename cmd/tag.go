@@ -9,11 +9,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// create the tag command
+// create the tag command. Bare `pin tag` ADDS (merges) tags; the `set` and
+// `rm` subcommands replace and remove. The two subcommands exist so the MCP
+// shim (which supports replace/remove) can route every tag mutation through
+// `pin` rather than writing task files itself — see mcp/server.py.
 func newTagCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "tag [ids] [tags]",
-		Short: "Add tags to one or more tasks",
+		Short: "Add tags to one or more tasks (or `tag set`/`tag rm`)",
 		Args:  cobra.MinimumNArgs(2),
 		Run: func(cmd *cobra.Command, args []string) {
 			ids, tagArgs, err := splitIDsAndTagArgs(args)
@@ -29,6 +32,69 @@ func newTagCmd() *cobra.Command {
 			}
 
 			updateTaskTags(ids, tags)
+		},
+	}
+	cmd.AddCommand(newTagSetCmd())
+	cmd.AddCommand(newTagRmCmd())
+	return cmd
+}
+
+// newTagSetCmd REPLACES a task's tag set with exactly the tags given.
+func newTagSetCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "set [ids] [tags]",
+		Short: "Replace a task's tags with exactly the tags given",
+		Args:  cobra.MinimumNArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			ids, tagArgs, err := splitIDsAndTagArgs(args)
+			if err != nil {
+				failf("Invalid tag command: %v\n", err)
+				return
+			}
+			tags, err := parseTagArgs(tagArgs)
+			if err != nil {
+				failf("Invalid tags: %v\n", err)
+				return
+			}
+			for _, id := range ids {
+				if err := setTaskTagsSingle(id, tags); err != nil {
+					if printNotPunchlistError(err) {
+						return
+					}
+					failf("Error updating task %d: %v\n", id, err)
+				}
+			}
+		},
+	}
+}
+
+// newTagRmCmd REMOVES the given tags from one or more tasks. Tags not present
+// are silently ignored (removal is idempotent).
+func newTagRmCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "rm [ids] [tags]",
+		Aliases: []string{"remove"},
+		Short:   "Remove the given tags from one or more tasks",
+		Args:    cobra.MinimumNArgs(2),
+		Run: func(cmd *cobra.Command, args []string) {
+			ids, tagArgs, err := splitIDsAndTagArgs(args)
+			if err != nil {
+				failf("Invalid tag command: %v\n", err)
+				return
+			}
+			tags, err := parseTagArgs(tagArgs)
+			if err != nil {
+				failf("Invalid tags: %v\n", err)
+				return
+			}
+			for _, id := range ids {
+				if err := removeTaskTagsSingle(id, tags); err != nil {
+					if printNotPunchlistError(err) {
+						return
+					}
+					failf("Error updating task %d: %v\n", id, err)
+				}
+			}
 		},
 	}
 }
@@ -146,6 +212,66 @@ func updateTaskTagsSingle(id int, tags []string) error {
 
 	fmt.Printf("Updated tags for task %d\n", id)
 	return nil
+}
+
+// replace a single task's tags with exactly the given set (order preserved,
+// deduped). An empty set clears all tags.
+func setTaskTagsSingle(id int, tags []string) error {
+	taskPath, err := findTaskFile(id)
+	if err != nil {
+		return err
+	}
+	t, err := task.Parse(taskPath)
+	if err != nil {
+		return err
+	}
+	t.Tags = dedupeTags(tags)
+	t.UpdatedAt = time.Now()
+	if err := t.Write(taskPath); err != nil {
+		return err
+	}
+	fmt.Printf("Set tags for task %d\n", id)
+	return nil
+}
+
+// remove the given tags from a single task. Tags absent from the task are
+// ignored, so removal is idempotent.
+func removeTaskTagsSingle(id int, tags []string) error {
+	taskPath, err := findTaskFile(id)
+	if err != nil {
+		return err
+	}
+	t, err := task.Parse(taskPath)
+	if err != nil {
+		return err
+	}
+	t.Tags = removeTags(t.Tags, tags)
+	t.UpdatedAt = time.Now()
+	if err := t.Write(taskPath); err != nil {
+		return err
+	}
+	fmt.Printf("Removed tags from task %d\n", id)
+	return nil
+}
+
+// removeTags returns existing with every tag in toRemove dropped (matched on
+// trimmed value), preserving the order of the tags that remain. Tags absent
+// from existing are ignored, so removal is idempotent.
+func removeTags(existing []string, toRemove []string) []string {
+	drop := make(map[string]struct{}, len(toRemove))
+	for _, tag := range toRemove {
+		if tag = strings.TrimSpace(tag); tag != "" {
+			drop[tag] = struct{}{}
+		}
+	}
+	kept := make([]string, 0, len(existing))
+	for _, tag := range existing {
+		if _, remove := drop[strings.TrimSpace(tag)]; remove {
+			continue
+		}
+		kept = append(kept, tag)
+	}
+	return kept
 }
 
 // merge tags while preserving order

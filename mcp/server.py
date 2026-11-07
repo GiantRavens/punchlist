@@ -19,8 +19,11 @@ import os
 import re
 import sys
 import json
+import shutil
 import logging
-from datetime import datetime, timezone
+import subprocess
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -47,33 +50,84 @@ logger = logging.getLogger("punchlist-mcp")
 # Match Go's DefaultLsStateOrder
 DEFAULT_STATES = ["TODO", "BEGUN", "FOLLOWUP", "DEFER", "NOTDO", "DONE"]
 DEFAULT_ID_WIDTH = 3
-DEFAULT_TITLE_MAX_LEN = 80
 
-# Match Go's slugifyRegex: [^a-z0-9]+
-_SLUG_RE = re.compile(r"[^a-z0-9]+")
-
-
-def slugify(text: str) -> str:
-    """Convert title to filename slug — matches Go's slugify exactly."""
-    s = text.lower()
-    s = _SLUG_RE.sub("-", s)
-    s = s.strip("-")
-    return s
-
-
-def truncate_with_ellipsis(text: str, max_len: int) -> str:
-    """Truncate title with '...' suffix — matches Go's truncateWithEllipsis."""
-    if max_len <= 0:
-        return text
-    if len(text) <= max_len:
-        return text
-    if max_len <= 3:
-        return text[:max_len]
-    return text[: max_len - 3] + "..."
+# ---------------------------------------------------------------------------
+# Writes delegate to the `pin` CLI — the MCP is NOT a second writer.
+#
+# The Go CLI owns every task-file mutation: disk-floor id allocation (so a
+# Syncthing-shared store cannot hand out a duplicate id), the per-project
+# write lock (so concurrent writers serialize), and the one canonical
+# frontmatter serializer. A Python reimplementation of any of that drifts the
+# moment either side changes — which is exactly the bug this server used to
+# carry. So mutations shell out to `pin`; only reads stay native here (they
+# are read-only and token-efficient). See mcp/CLAUDE.md "Writes shell out".
+# ---------------------------------------------------------------------------
 
 
-def now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+def _pin_bin() -> str:
+    """Locate the `pin` binary. An explicit PUNCHLIST_PIN_BIN wins (handy for
+    pointing at an unreleased build); otherwise PATH, then common install
+    locations, then a bare name so subprocess surfaces a clear error."""
+    override = os.environ.get("PUNCHLIST_PIN_BIN")
+    if override:
+        return override
+    found = shutil.which("pin")
+    if found:
+        return found
+    for cand in (
+        "/opt/homebrew/bin/pin",
+        "/usr/local/bin/pin",
+        os.path.expanduser("~/.local/bin/pin"),
+    ):
+        if os.path.exists(cand):
+            return cand
+    return "pin"
+
+
+_PIN_VERSION: tuple | None = None
+
+
+def _pin_version() -> tuple:
+    """The installed pin's version as a tuple, read once (`pin version` prints
+    "pin 1.3.9"). (0,) when it cannot be read."""
+    global _PIN_VERSION
+    if _PIN_VERSION is None:
+        try:
+            out = subprocess.run([_pin_bin(), "version"], capture_output=True, text=True).stdout
+            m = re.search(r"(\d+)\.(\d+)\.(\d+)", out)
+            _PIN_VERSION = tuple(int(x) for x in m.groups()) if m else (0,)
+        except FileNotFoundError:
+            _PIN_VERSION = (0,)
+    return _PIN_VERSION
+
+
+def _run_pin(domain: "PunchlistDomain", argv: list[str]) -> str:
+    """Run one `pin` mutation inside the domain's directory, returning stdout.
+
+    `pin` resolves its scope by walking up from the working directory to the
+    nearest .punchlist/, so the domain directory (which holds that store) IS
+    the scope selector — no path token, no PUNCHLIST_ROOT env needed. On a
+    non-zero exit `pin` has already written the reason to stderr; surface it.
+    """
+    cmd = [_pin_bin(), *argv]
+    try:
+        proc = subprocess.run(
+            cmd, cwd=str(domain.root), capture_output=True, text=True
+        )
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            f"could not run `pin` ({cmd[0]}): {e}. "
+            "Put pin on PATH or set PUNCHLIST_PIN_BIN."
+        )
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        raise RuntimeError(f"`pin {' '.join(argv)}` failed: {detail}")
+    return proc.stdout
+
+
+def _tag_brace(tags: list[str]) -> str:
+    """Render a tag list as pin's `{a,b,c}` brace literal."""
+    return "{" + ",".join(tags) + "}"
 
 
 def parse_task_file(path: Path) -> dict[str, Any]:
@@ -105,95 +159,6 @@ def serialize(obj: Any) -> Any:
     if isinstance(obj, (list, tuple)):
         return [serialize(i) for i in obj]
     return obj
-
-
-# ---------------------------------------------------------------------------
-# Section manipulation — matches Go's splitSection/appendEntry/joinBlocks
-# ---------------------------------------------------------------------------
-
-
-def _index_of_heading_line(body: str, heading: str) -> int:
-    """Find heading only as a complete line (line-anchored, matching Go's
-    indexOfHeadingLine). A plain substring find corrupted task files whose
-    prose merely mentioned a section heading (pin #28)."""
-    search_from = 0
-    while True:
-        idx = body.find(heading, search_from)
-        if idx == -1:
-            return -1
-        at_line_start = idx == 0 or body[idx - 1] == "\n"
-        end = idx + len(heading)
-        at_line_end = end == len(body) or body[end] in "\n\r"
-        if at_line_start and at_line_end:
-            return idx
-        search_from = idx + 1
-
-
-def split_section(body: str, heading: str) -> tuple[str, str, str, bool]:
-    """Split markdown body into (before, section, after, found) for a heading."""
-    idx = _index_of_heading_line(body, heading)
-    if idx == -1:
-        return body, "", "", False
-    before = body[:idx]
-    rest = body[idx:]
-    search_start = len(heading)
-    next_idx = rest.find("\n## ", search_start)
-    if next_idx == -1:
-        return before, rest, "", True
-    return before, rest[:next_idx], rest[next_idx:], True
-
-
-def append_entry(section: str, entry: str) -> str:
-    """Append a list entry to a section as a TIGHT markdown list (matches
-    Go's appendEntry since 1.3.2): consecutive "- " lines, blank line only
-    between the heading and the first item. Loose pre-1.3.2 files stay valid."""
-    section = section.rstrip("\n")
-    if not section:
-        return entry + "\n\n"
-    last_line = section.rsplit("\n", 1)[-1]
-    separator = "\n" if last_line.strip().startswith("- ") else "\n\n"
-    return section + separator + entry + "\n\n"
-
-
-def join_blocks(*blocks: str) -> str:
-    """Join markdown blocks with blank lines, trimming edges."""
-    cleaned = []
-    for b in blocks:
-        b = b.strip("\n")
-        if b:
-            cleaned.append(b)
-    return "\n\n".join(cleaned)
-
-
-def add_note_to_body(body: str, message: str) -> str:
-    """Append a timestamped note to ## Notes section — matches Go's addNote."""
-    note_entry = f"- {now_iso()}: {message}"
-    # Extract log section first (it goes at the end)
-    pre_body, log_section, after_log, log_found = split_section(body, "## Log")
-    if log_found:
-        pre_body = join_blocks(pre_body, after_log)
-
-    before_notes, notes_section, after_notes, notes_found = split_section(
-        pre_body, "## Notes"
-    )
-    if not notes_found:
-        notes_section = "## Notes"
-
-    notes_section = append_entry(notes_section, note_entry)
-    new_pre_body = join_blocks(before_notes, notes_section, after_notes)
-    if log_found:
-        return join_blocks(new_pre_body, log_section)
-    return new_pre_body
-
-
-def add_log_to_body(body: str, message: str) -> str:
-    """Append a timestamped log entry to ## Log section — matches Go's addLog."""
-    log_entry = f"- {now_iso()}: {message}"
-    pre_body, log_section, after_log, log_found = split_section(body, "## Log")
-    if not log_found:
-        log_section = "## Log"
-    log_section = append_entry(log_section, log_entry)
-    return join_blocks(pre_body, after_log, log_section)
 
 
 # ---------------------------------------------------------------------------
@@ -266,10 +231,6 @@ class PunchlistDomain:
     def next_id(self) -> int:
         return self.config.get("next_id", 1)
 
-    @property
-    def title_max_len(self) -> int:
-        return self.config.get("title_max_len", DEFAULT_TITLE_MAX_LEN)
-
     def task_files(self) -> list[Path]:
         if not self.tasks_dir.exists():
             return []
@@ -293,28 +254,32 @@ class PunchlistDomain:
                 return f
         return None
 
-    def increment_id(self):
-        """Increment next_id and write config back preserving field order."""
-        self.config["next_id"] = self.next_id + 1
-        config_path = self.root / ".punchlist" / "config.yaml"
-        # Atomic write via tmp file — matches Go's SaveConfig pattern
-        tmp_path = str(config_path) + ".tmp"
-        with open(tmp_path, "w") as f:
-            yaml.dump(self.config, f, default_flow_style=False, sort_keys=False)
-        os.rename(tmp_path, str(config_path))
-
 
 class PunchlistWorkspace:
     """Discovers and manages all punchlist domains under a root."""
 
+    # Discovery is depth-bounded. An unbounded walk of the notebook (229K dirs,
+    # bulk forge/batch state) took >170s and blew Claude's 30s MCP connect
+    # timeout; every real store sits <=4 levels down (2026-10-21 census), so 5
+    # leaves one level of headroom at ~0.5s. Override with PUNCHLIST_MAX_DEPTH.
+    DEFAULT_MAX_DEPTH = 5
+    # refresh() runs on every tool call; rescan at most this often.
+    REFRESH_TTL_SECS = 30.0
+
     def __init__(self, root: Path):
         self.root = root
         self.domains: dict[str, PunchlistDomain] = {}
+        self.max_depth = int(
+            os.environ.get("PUNCHLIST_MAX_DEPTH", self.DEFAULT_MAX_DEPTH)
+        )
+        self._last_discover = 0.0
         self._discover()
 
     def _discover(self):
-        """Walk filesystem recursively for .punchlist/ directories."""
+        """Walk the filesystem (to max_depth) for .punchlist/ directories."""
         self.domains.clear()
+        started = time.monotonic()
+        base_depth = len(self.root.parts)
 
         # Load root config as fallback
         root_config_path = self.root / ".punchlist" / "config.yaml"
@@ -334,6 +299,8 @@ class PunchlistWorkspace:
             ]
 
             dp = Path(dirpath)
+            if len(dp.parts) - base_depth >= self.max_depth:
+                dirnames[:] = []  # check this dir, but descend no further
             if dp == self.root:
                 # Root itself: check if it has tasks/ (makes it a domain too)
                 if (self.root / "tasks").exists():
@@ -375,13 +342,17 @@ class PunchlistWorkspace:
                     if d not in ("tasks", ".punchlist", ".trash")
                 ]
 
+        self._last_discover = time.monotonic()
         logger.info(
-            f"Discovered {len(self.domains)} domain(s): {list(self.domains.keys())}"
+            f"Discovered {len(self.domains)} domain(s) in "
+            f"{self._last_discover - started:.2f}s (max_depth={self.max_depth}): "
+            f"{list(self.domains.keys())}"
         )
 
     def refresh(self):
-        """Re-scan for domains (cheap operation)."""
-        self._discover()
+        """Re-scan for domains, at most once per REFRESH_TTL_SECS."""
+        if time.monotonic() - self._last_discover >= self.REFRESH_TTL_SECS:
+            self._discover()
 
     def get_domain(self, name: str) -> Optional[PunchlistDomain]:
         return self.domains.get(name)
@@ -518,7 +489,9 @@ def build_server(workspace: PunchlistWorkspace) -> Server:
             Tool(
                 name="punchlist_create",
                 description=(
-                    "Create a new task in a domain. Auto-assigns ID, creates file, updates config."
+                    "Create a new task in a domain. Delegates to the `pin` CLI, so the "
+                    "ID is allocated from the on-disk floor (sync-safe), the project "
+                    "write lock is held, and the file is written by pin's own serializer."
                 ),
                 inputSchema={
                     "type": "object",
@@ -548,6 +521,29 @@ def build_server(workspace: PunchlistWorkspace) -> Server:
                             "type": "string",
                             "description": "Initial body/notes content",
                         },
+                        "ticket": {
+                            "type": "boolean",
+                            "description": (
+                                "Create a ticket: seed ## Problem, ## Approach and "
+                                "## Acceptance. Implied by problem, approach or acceptance."
+                            ),
+                        },
+                        "problem": {
+                            "type": "string",
+                            "description": "Ticket ## Problem: the fault, its root cause and the evidence (needs pin 1.3.9+)",
+                        },
+                        "approach": {
+                            "type": "string",
+                            "description": "Ticket ## Approach: the fix (needs pin 1.3.9+)",
+                        },
+                        "acceptance": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "Ticket ## Acceptance: testable post-conditions, one "
+                                "checkbox each (needs pin 1.3.9+)"
+                            ),
+                        },
                     },
                     "required": ["domain", "title"],
                 },
@@ -555,8 +551,11 @@ def build_server(workspace: PunchlistWorkspace) -> Server:
             Tool(
                 name="punchlist_update",
                 description=(
-                    "Update a task's metadata and/or add notes/log entries. "
-                    "State changes are validated against the domain's state list and auto-logged."
+                    "Update a task's state, priority, tags, and/or append a note. "
+                    "Delegates to the `pin` CLI (write-locked, single serializer). "
+                    "State changes are validated against the domain's state list; pin "
+                    "auto-logs them to ## Log (which is maintained automatically — there "
+                    "is no raw log-injection; use add_note for free-form entries)."
                 ),
                 inputSchema={
                     "type": "object",
@@ -591,11 +590,7 @@ def build_server(workspace: PunchlistWorkspace) -> Server:
                         },
                         "add_note": {
                             "type": "string",
-                            "description": "Timestamped note to append",
-                        },
-                        "add_log": {
-                            "type": "string",
-                            "description": "Timestamped log entry to append",
+                            "description": "Timestamped note to append to ## Notes",
                         },
                     },
                     "required": ["domain", "id"],
@@ -852,51 +847,55 @@ def build_server(workspace: PunchlistWorkspace) -> Server:
             if not domain:
                 raise ValueError(f"Unknown domain: {args['domain']}")
 
-            task_id = domain.next_id
-            title = args["title"]
+            # Validate the state against THIS domain's catalog before shelling
+            # out, so a bad state fails with a domain-aware message rather than
+            # a raw pin error.
             state_token = args.get(
                 "state", domain.states[0] if domain.states else "TODO"
             )
             state = domain.validate_state(state_token)
 
-            # Truncate title for storage — matches Go behavior
-            full_title = title
-            title = truncate_with_ellipsis(full_title, domain.title_max_len)
+            # `pin <state> "<title>" [pri:N] [tags:{a,b}]` — pin truncates the
+            # title, slugifies the filename, floors the id off disk, and writes
+            # under the project lock. We reconstruct none of that here.
+            argv = [state, args["title"]]
+            if args.get("priority") is not None:
+                argv.append(f"pri:{int(args['priority'])}")
+            if args.get("tags"):
+                argv.append(f"tags:{_tag_brace(args['tags'])}")
 
-            # Build frontmatter
-            meta: dict[str, Any] = {
-                "id": task_id,
-                "title": title,
-                "state": state,
-                "created_at": now_iso(),
-                "updated_at": now_iso(),
-            }
-            if "priority" in args:
-                meta["priority"] = args["priority"]
-            if "tags" in args:
-                meta["tags"] = args["tags"]
+            # Ticket sections are filled by pin in the create command itself
+            # (pin #21), so the task is never written with placeholders. The
+            # arguments go through subprocess as a list: no shell quoting.
+            fills = [("--problem", args.get("problem")), ("--approach", args.get("approach"))]
+            criteria = [c for c in (args.get("acceptance") or []) if str(c).strip()]
+            if args.get("ticket") or any(v for _, v in fills) or criteria:
+                if any(v for _, v in fills) or criteria:
+                    if _pin_version() < (1, 3, 9):
+                        raise RuntimeError(
+                            "problem/approach/acceptance need pin 1.3.9 or later; "
+                            f"{_pin_bin()} reports {'.'.join(map(str, _pin_version()))}"
+                        )
+                argv.append("--ticket")
+                for flag, value in fills:
+                    if value and str(value).strip():
+                        argv += [flag, str(value)]
+                for c in criteria:
+                    argv += ["--acceptance", str(c)]
 
-            # Build body — matches Go: "# {fullTitle}\n" then addLog
-            body = f"# {full_title}"
+            out = _run_pin(domain, argv)
+            m = re.search(r"Created task (\d+): (.+)", out)
+            if not m:
+                raise RuntimeError(
+                    f"could not parse created-task id from pin output: {out!r}"
+                )
+            task_id = int(m.group(1))
+            filename = os.path.basename(m.group(2).strip())
+
+            # The MCP's `body` is a free-form note — route it through `pin note`
+            # (which appends to ## Notes), not into ## Log.
             if args.get("body"):
-                body = add_note_to_body(body, args["body"])
-            body = add_log_to_body(body, "Created task")
-
-            # Build filename — matches Go: fmt.Sprintf("%0*d-%s.md", idWidth, id, slug)
-            slug = slugify(title)
-            filename = f"{str(task_id).zfill(domain.id_width)}-{slug}.md"
-            filepath = domain.tasks_dir / filename
-            domain.tasks_dir.mkdir(parents=True, exist_ok=True)
-
-            post = frontmatter.Post(body, **meta)
-            # Atomic write
-            tmp_path = str(filepath) + ".tmp"
-            with open(tmp_path, "w") as f:
-                f.write(frontmatter.dumps(post))
-            os.rename(tmp_path, str(filepath))
-
-            # Update config
-            domain.increment_id()
+                _run_pin(domain, ["note", str(task_id), args["body"]])
 
             return {
                 "created": True,
@@ -917,69 +916,58 @@ def build_server(workspace: PunchlistWorkspace) -> Server:
                     f"Task {args['id']} not found in {args['domain']}"
                 )
 
-            post = frontmatter.load(str(path))
+            task_id = str(args["id"])
             changes: list[str] = []
-            body = post.content
 
-            # State change
+            # Each field maps to one `pin` mutation. They run sequentially;
+            # each one takes and releases the project write lock, so concurrent
+            # updates serialize. pin auto-logs state/priority to ## Log.
+
+            # State — validated against this domain's catalog first. pin also
+            # stamps started_at (BEGUN) / completed_at (DONE) itself.
             if "state" in args:
                 new_state = domain.validate_state(args["state"])
-                old_state = post.metadata.get("state", "unknown")
-                post.metadata["state"] = new_state
-                changes.append(f"State changed from {old_state} to {new_state}")
+                _run_pin(domain, [new_state, task_id])
+                changes.append(f"State set to {new_state}")
 
-                # Match Go: started_at only for BEGUN, completed_at only for DONE
-                if new_state.upper() == "BEGUN" and not post.metadata.get(
-                    "started_at"
-                ):
-                    post.metadata["started_at"] = now_iso()
-                if new_state.upper() == "DONE":
-                    post.metadata["completed_at"] = now_iso()
+            # Priority (pin treats 0 as clear).
+            if args.get("priority") is not None:
+                _run_pin(domain, ["pri", task_id, str(int(args["priority"]))])
+                changes.append(f"Priority set to {args['priority']}")
 
-            # Priority
-            if "priority" in args:
-                old_p = post.metadata.get("priority", "unset")
-                post.metadata["priority"] = args["priority"]
-                changes.append(
-                    f"Priority changed from {old_p} to {args['priority']}"
-                )
-
-            # Tags
+            # Tags: replace (`tag set`), add (`tag`), remove (`tag rm`).
             if "tags" in args:
-                post.metadata["tags"] = args["tags"]
-                changes.append(f"Tags set to {args['tags']}")
-            if "add_tags" in args:
-                existing = post.metadata.get("tags") or []
-                post.metadata["tags"] = list(set(existing + args["add_tags"]))
+                new_tags = args["tags"] or []
+                if new_tags:
+                    _run_pin(domain, ["tag", "set", task_id, _tag_brace(new_tags)])
+                    changes.append(f"Tags set to {new_tags}")
+                else:
+                    # Replace-with-empty == clear: drop whatever is present.
+                    current = parse_task_metadata(path).get("tags") or []
+                    if current:
+                        _run_pin(
+                            domain, ["tag", "rm", task_id, _tag_brace(current)]
+                        )
+                    changes.append("Tags cleared")
+            if args.get("add_tags"):
+                _run_pin(domain, ["tag", task_id, _tag_brace(args["add_tags"])])
                 changes.append(f"Added tags: {args['add_tags']}")
-            if "remove_tags" in args:
-                existing = post.metadata.get("tags") or []
-                post.metadata["tags"] = [
-                    t for t in existing if t not in args["remove_tags"]
-                ]
+            if args.get("remove_tags"):
+                _run_pin(
+                    domain, ["tag", "rm", task_id, _tag_brace(args["remove_tags"])]
+                )
                 changes.append(f"Removed tags: {args['remove_tags']}")
 
-            # Append note — uses section manipulation
-            if "add_note" in args:
-                body = add_note_to_body(body, args["add_note"])
+            # Free-form note → ## Notes.
+            if args.get("add_note"):
+                _run_pin(domain, ["note", task_id, args["add_note"]])
                 changes.append("Added note")
 
-            # Auto-log changes + explicit log
-            for change in changes:
-                body = add_log_to_body(body, change)
-            if "add_log" in args:
-                body = add_log_to_body(body, args["add_log"])
-
-            post.content = body
-            post.metadata["updated_at"] = now_iso()
-
-            # Atomic write
-            tmp_path = str(path) + ".tmp"
-            with open(tmp_path, "w") as f:
-                f.write(frontmatter.dumps(post))
-            os.rename(tmp_path, str(path))
-
-            return {"updated": True, "id": args["id"], "changes": changes}
+            return {
+                "updated": bool(changes),
+                "id": args["id"],
+                "changes": changes,
+            }
 
         # -- punchlist_summary --
         if name == "punchlist_summary":

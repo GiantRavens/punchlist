@@ -187,7 +187,9 @@ When a state hotkey is used in browse, the state is applied and the cursor advan
 
 ```bash
 pin note 12 "call vendor and confirm timeline"    # append a note
-pin tag 12 15 "today, blocked"                    # add tags to one or more tasks
+pin tag 12 15 "today, blocked"                    # add (merge) tags to one or more tasks
+pin tag set 12 "{launch,pr}"                      # replace a task's tags with exactly these
+pin tag rm 12 "{blocked}"                         # remove the given tags (idempotent)
 pin due 12 "next tuesday"                         # set or change due date
 pin due 12 2026-01-15
 pin edit 12                                       # open in $EDITOR
@@ -244,10 +246,72 @@ Structured checkboxes from a `## Acceptance` section in the task body:
 ```bash
 pin acceptance 1       # list criteria with indices (alias: pin checks)
 pin acceptance add 1 "Tests pass"   # append a new criterion (creates the section if missing)
+pin acceptance set 1 2 "Tests pass on CI"   # edit item 2's text (keeps its checked state)
 pin acceptance rm 1 2  # remove item 2 (alias: remove)
 pin check 1 2          # toggle item 2 checked/unchecked
 pin show --json 1 | jq .acceptance    # structured array: text, checked, index
 ```
+
+### Notes
+
+Timestamped notes in the `## Notes` section — a running log of decisions and context:
+
+```bash
+pin note 1 "called vendor; waiting on timeline"   # append a note
+pin note ls 1          # list notes with indices (alias: list)
+pin note rm 1 2        # remove note 2 (alias: remove)
+```
+
+### Tickets filled at creation
+
+A plain `pin todo "title"` stays a one-line todo. When a task needs a real ticket, the
+same command can write the whole thing, so it never exists with placeholders:
+
+```bash
+pin todo --ticket "Fix the silent hangar sweep" pri:1 \
+  --problem "The sweep exits 0 while every drop errors: safe_rm is not imported." \
+  --approach "Import it, and propagate the wrapper's exit status." \
+  --acceptance "a sweep with a failing drop exits non-zero" \
+  --acceptance "the alert fires within one sweep"
+
+pin todo --ticket "Fix the silent hangar sweep" --body-file ticket.md   # or --body-file - (stdin)
+```
+
+`--problem`, `--approach` and `--acceptance` (repeatable) each imply `--ticket`, and
+`--flag=value` works too. A `--body-file` is markdown below the title: prose before the
+first `##` heading becomes the description, `## Problem` and `## Approach` fill those
+sections, and `## Acceptance` list items (`- `, `- [ ] `, `- [x] `) become criteria.
+`--body-file` without `--ticket` adds plain prose and no scaffold. The file is read before
+anything is allocated, so a bad body creates no task: a `# ` title line, `## Notes` or
+`## Log` (append-only journals pin writes itself), a repeated or empty section, a nested
+list item, or a non-list line under `## Acceptance` are refused, and `## problem` in any
+case fills `## Problem`. A `#` or `##` line counts as a heading even inside a code fence,
+because pin's section reader does not track fences; indent it in a code sample. Each
+criterion is one line. The file or stdin is read before the project lock is taken, so a
+slow pipe never blocks other `pin` commands. It is the safe channel for long prose:
+quotes, `$` and backticks arrive verbatim.
+
+### Section prose (Problem, Approach, custom)
+
+Fill a `--ticket` scaffold's free-prose sections without opening an editor — so an
+agent can author a whole ticket over the CLI, never hand-editing the file:
+
+```bash
+pin problem 1 "EM is rarely run; always-on monolith, intermittent use."   # set ## Problem
+pin approach 1 "Keep EM as the brain; move interception to mitmproxy."     # set ## Approach
+pin section set 1 "Risks" "Second CA to manage; pinned apps fail."         # any custom section
+pin section add 1 Problem "Evidence: ~3,300 LOC Rust, two launchd agents." # append a paragraph
+pin problem 1 --file problem.md                                             # text from a file
+pin approach 1 --file -                                                     # or from stdin
+```
+
+`problem` and `approach` are shortcuts for `section set`; every section command takes
+`--file PATH` (or `--file -`) in place of the text argument. Text holding a `#` or `##`
+heading line is refused, since it would split the section. Setting or appending to a
+section that still holds the scaffold placeholder replaces the placeholder, and so does
+the first `pin acceptance add` on a fresh ticket. A missing section is created
+above `## Acceptance`/`## Notes`/`## Log`, keeping the description together. The managed
+sections `Acceptance`, `Notes`, and `Log` are rejected — use `pin acceptance` and `pin note`.
 
 ### Dependencies and planning
 

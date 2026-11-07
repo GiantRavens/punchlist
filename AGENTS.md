@@ -31,6 +31,7 @@ If MCP is not available, use the `pin` CLI commands below.
 - `pin meta <id> key=value` — attach provenance: where the task came from, who assigned it
 - `pin deps <id>` — understand what's blocking what
 - `pin note <id> "..."` — append a persistent log entry (survives beyond this session)
+- `pin todo --ticket "title" --problem "…" --approach "…" --acceptance "…"` — file a complete ticket in one command, or `--body-file -` to pass the body as markdown on stdin (safest for long prose); never leave scaffold placeholders and never write criteria into notes
 
 ## Scope — check before you create
 
@@ -111,6 +112,9 @@ pin check <id> <n>          # toggle criterion n
 pin meta <id>               # view metadata
 pin meta <id> key=value     # set metadata
 pin deps <id>               # dependency map
+pin todo --ticket "title" --problem "…" --approach "…" --acceptance "…"   # a filled ticket
+pin todo --ticket "title" --body-file -     # body as markdown on stdin
+pin problem <id> --file f.md               # set a section from a file (also approach, section set)
 ```
 
 For the full workflow guide, see `docs/assistant-brief.md`.

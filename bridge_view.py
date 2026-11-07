@@ -76,14 +76,32 @@ def _states(ctx: dict) -> list[str]:
     return ["TODO", "BEGUN", "FOLLOWUP", "DEFER", "NOTDO", "DONE"]
 
 
-def _task_list(ctx: dict, state: str = "", q: str = "") -> list[dict]:
+# Sort vocabulary (0148 rule 5: the ratified words + labeled extras). Default NEWEST first
+# (captain 2026-09-25): a 4,500-task context opened in pin's own order buried today's pins.
+SORTS = (("newest", "newest first"), ("oldest", "oldest first"),
+         ("updated", "recently updated"), ("id", "by number"))
+DEFAULT_SORT = "newest"
+
+
+def _sorted_tasks(tasks: list[dict], sort: str) -> list[dict]:
+    key = sort if sort in dict(SORTS) else DEFAULT_SORT
+    if key == "newest":
+        return sorted(tasks, key=lambda t: str(t.get("created_at") or ""), reverse=True)
+    if key == "oldest":
+        return sorted(tasks, key=lambda t: str(t.get("created_at") or ""))
+    if key == "updated":
+        return sorted(tasks, key=lambda t: str(t.get("updated_at") or ""), reverse=True)
+    return sorted(tasks, key=lambda t: int(t.get("id") or 0))
+
+
+def _task_list(ctx: dict, state: str = "", q: str = "", sort: str = DEFAULT_SORT) -> list[dict]:
     tasks = _json(ctx, ["ls", "--json"])
     if not isinstance(tasks, list):
         return []
     ql = q.casefold().strip()
-    return [t for t in tasks
-            if (not state or str(t.get("state", "")).upper() == state.upper())
-            and (not ql or ql in str(t.get("title", "")).casefold())]
+    return _sorted_tasks([t for t in tasks
+                          if (not state or str(t.get("state", "")).upper() == state.upper())
+                          and (not ql or ql in str(t.get("title", "")).casefold())], sort)
 
 
 def _shell(title: str, body: str) -> str:
@@ -103,29 +121,33 @@ a{color:#f6ef95}.notice{border-left:5px solid #ffce63;background:#111018;padding
 def render_index(notice: str = "") -> str:
     cards = "".join(
         f'<a class=task href="/punchlists/{html.escape(c["id"])}"><b>{html.escape(c["label"])}</b>'
-        f'<div class=meta>{html.escape(c["rel"] or "notebook")}</div></a>'
+        f'<div class=meta>{html.escape(str(c["tasks"]))}</div></a>'
         for c in punchlist_board.contexts())
     msg = f'<div class=notice>{html.escape(notice)}</div>' if notice else ""
     return _shell("Punchlists", f"{msg}<h1>Punchlist contexts</h1><div class=tasks>{cards}</div>")
 
 
 def render_context(ctx: dict, state: str = "", q: str = "", notice: str = "",
-                   selected: int | None = None) -> str:
+                   selected: int | None = None, sort: str = DEFAULT_SORT) -> str:
     e = html.escape
-    tasks = _task_list(ctx, state=state, q=q)
+    sort = sort if sort in dict(SORTS) else DEFAULT_SORT
+    tasks = _task_list(ctx, state=state, q=q, sort=sort)
     states = _states(ctx)
     opts = '<option value="">open + closed</option>' + "".join(
         f'<option value="{e(s)}"{(" selected" if s == state else "")}>{e(s)}</option>' for s in states)
     rows = "".join(
-        f'<a class=task href="/punchlists/{e(ctx["id"])}/{int(t["id"])}?state={quote(state)}&q={quote(q)}">'
+        f'<a class=task href="/punchlists/{e(ctx["id"])}/{int(t["id"])}?state={quote(state)}&q={quote(q)}&sort={quote(sort)}">'
         f'<span class=state>{e(str(t.get("state", "")))}</span> <b>#{int(t["id"])}</b> {e(str(t.get("title", "")))}'
-        f'<div class=meta>priority {int(t.get("priority") or 0)} · updated {e(str(t.get("updated_at", ""))[:16])}</div></a>'
+        f'<div class=meta>created {e(str(t.get("created_at", ""))[:16].replace("T", " "))} · updated {e(str(t.get("updated_at", ""))[:16].replace("T", " "))}</div></a>'
         for t in tasks)
     launch_rel = quote(ctx["rel"], safe="")
     top = (f'<div class=top><h1>{e(ctx["label"])}</h1><a class=launch '
-           f'href="hammerspoon://pin-browse?context={launch_rel}">open in TUI</a></div>')
+           f'href="hammerspoon://pin-browse?context={launch_rel}">open in TUI</a></div>'
+           f'<div class=meta>{e(str(ctx["tasks"]))}</div>')
+    sort_opts = "".join(f'<option value="{k}"{(" selected" if k == sort else "")}>{e(label)}</option>' for k, label in SORTS)
     filt = (f'<form class=bar method=get><input name=q value="{e(q)}" placeholder="filter titles">'
-            f'<select name=state>{opts}</select><button>engage</button></form>')
+            f'<select name=state>{opts}</select><select name=sort title="sort">{sort_opts}</select>'
+            f'<button>engage</button></form>')
     create = ""
     if WRITE_ENABLED:
         create = (f'<form class=create method=post action=/punchlists/action>'

@@ -15,9 +15,21 @@ import (
 // so users can still run `pin todo --help` etc. Returns true if help was shown
 // and the caller should return.
 func handleHelpFlag(cmd *cobra.Command, args []string) bool {
+	if wantsHelp(args) {
+		_ = cmd.Help()
+		return true
+	}
+	return false
+}
+
+// wantsHelp reports a --help/-h token that is not the value of a creation
+// flag (`--problem -h` is text, not a help request).
+func wantsHelp(args []string) bool {
+	if rest, _, err := parseCreateFlags(args); err == nil {
+		args = rest
+	}
 	for _, a := range args {
 		if a == "--help" || a == "-h" {
-			_ = cmd.Help()
 			return true
 		}
 	}
@@ -71,6 +83,7 @@ func newTodoCmd() *cobra.Command {
 		Use:     "todo [id]",
 		Aliases: []string{"TODO"},
 		Short:   "Move a task back to TODO, or create one (use --ticket for a Problem/Approach/Acceptance scaffold)",
+		Long:    "Move tasks back to TODO by id, or create a task from a title and modifiers.\n\n" + createFlagsHelp,
 		Args:    cobra.MinimumNArgs(1),
 		// Allow titles that begin with `--` (e.g. `pin todo "--rerun the orca cycle"`)
 		// to pass through cobra's flag parser as plain args. State-creation commands
@@ -164,6 +177,14 @@ func newDoneCmd() *cobra.Command {
 }
 
 func shouldCreateStateFromArgs(args []string) bool {
+	// creation flags and their values (--body-file -, --acceptance "5") are not
+	// ids or title words; judge the remaining tokens. A malformed creation flag
+	// routes to creation so its error names the flag (pin #21).
+	rest, _, err := parseCreateFlags(args)
+	if err != nil {
+		return true
+	}
+	args = rest
 	if len(args) == 0 {
 		return false
 	}

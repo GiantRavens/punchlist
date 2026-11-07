@@ -86,7 +86,100 @@ func newAcceptanceCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newAcceptanceAddCmd())
 	cmd.AddCommand(newAcceptanceRmCmd())
+	cmd.AddCommand(newAcceptanceSetCmd())
 	return cmd
+}
+
+// create the acceptance set subcommand — edit a criterion's text in place,
+// preserving its checked/unchecked state. Fills the gap where correcting a
+// criterion previously meant rm + add (which also lost its checked state and
+// moved it to the end).
+func newAcceptanceSetCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "set [id] [index] [text]",
+		Short: "Replace an acceptance criterion's text by index (keeps checked state)",
+		Args:  cobra.ExactArgs(3),
+		Run: func(cmd *cobra.Command, args []string) {
+			id, err := strconv.Atoi(args[0])
+			if err != nil {
+				failf("Invalid task ID: %v\n", err)
+				return
+			}
+			index, err := strconv.Atoi(args[1])
+			if err != nil || index < 1 {
+				failf("Invalid check index: %s (must be 1 or greater)\n", args[1])
+				return
+			}
+			text := strings.TrimSpace(args[2])
+			if text == "" {
+				failf("Acceptance criterion text must not be empty\n")
+				return
+			}
+
+			taskPath, err := findTaskFile(id)
+			if err != nil {
+				if printNotPunchlistError(err) {
+					return
+				}
+				failf("Error finding task: %v\n", err)
+				return
+			}
+
+			t, err := task.Parse(taskPath)
+			if err != nil {
+				failf("Error parsing task: %v\n", err)
+				return
+			}
+
+			newBody, err := setAcceptanceItemText(t.Body, index, text)
+			if err != nil {
+				failf("Error: %v\n", err)
+				return
+			}
+			t.Body = newBody
+			t.UpdatedAt = time.Now()
+			if err := t.Write(taskPath); err != nil {
+				failf("Error updating task: %v\n", err)
+				return
+			}
+			fmt.Printf("Updated acceptance criterion %d on task %d\n", index, id)
+		},
+	}
+}
+
+// setAcceptanceItemText replaces the text of the nth ## Acceptance checkbox,
+// keeping its existing checked marker. Returns the new body and any error.
+func setAcceptanceItemText(body string, targetIndex int, text string) (string, error) {
+	before, section, after, found := splitSection(body, "## Acceptance")
+	if !found {
+		return "", fmt.Errorf("no ## Acceptance section found")
+	}
+
+	lines := strings.Split(section, "\n")
+	checkIndex := 0
+	updated := false
+	for i, line := range lines {
+		match := acceptanceCheckboxRe.FindStringSubmatch(strings.TrimSpace(line))
+		if match == nil {
+			continue
+		}
+		checkIndex++
+		if checkIndex != targetIndex {
+			continue
+		}
+		marker := match[1] // preserve " ", "x", or "X"
+		indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+		lines[i] = fmt.Sprintf("%s- [%s] %s", indent, marker, text)
+		updated = true
+		break
+	}
+
+	if !updated {
+		return "", fmt.Errorf("check index %d not found (found %d items)", targetIndex, checkIndex)
+	}
+
+	newSection := strings.Join(lines, "\n")
+	return joinBlocks(before, newSection, after), nil
 }
 
 // create the acceptance add subcommand
@@ -104,6 +197,10 @@ func newAcceptanceAddCmd() *cobra.Command {
 			text := strings.TrimSpace(args[1])
 			if text == "" {
 				failf("Acceptance criterion text must not be empty\n")
+				return
+			}
+			if err := checkCriterion(text); err != nil {
+				failf("%v\n", err)
 				return
 			}
 
@@ -195,6 +292,11 @@ func addAcceptanceItem(body, text string) string {
 
 	before, section, after, found := splitSection(body, "## Acceptance")
 	if found {
+		// a fresh --ticket scaffold holds one placeholder criterion; the first
+		// real criterion replaces it instead of sitting beside it
+		if items := parseAcceptance(body); len(items) == 1 && isScaffoldPlaceholder(items[0].Text) {
+			return joinBlocks(before, "## Acceptance\n\n"+entry, after)
+		}
 		section = strings.TrimRight(section, "\n") + "\n" + entry
 		return joinBlocks(before, section, after)
 	}
