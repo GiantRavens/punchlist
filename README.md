@@ -573,6 +573,34 @@ make install  # go install with version ldflags
 
 For command grammar details, see `docs/grammar.md`.
 
+### Releasing
+
+A release is a push. Bump `VERSION`, add a `## <version>` section to `CHANGELOG.md`,
+commit, and `git push`.
+
+Every update bumps the version, at least the patch number:
+
+| Change | Bump | Example |
+|---|---|---|
+| any update: a fix, a small feature, docs that ship in the binary | patch | 1.3.9 to 1.3.10 |
+| a significant feature | minor | 1.3.10 to 1.4.0 |
+| a major overhaul, or anything that breaks how existing task files or commands work | major | 1.4.0 to 2.0.0 |
+
+Numbers are not padded: 1.3.10 follows 1.3.9. When a push to main changes `VERSION`, the `auto-release`
+workflow runs the tests, tags `v<version>`, publishes the GitHub release with that
+changelog section as its notes, attaches binaries for Linux, macOS and Windows, and
+bumps the Homebrew tap. Users then get it with `brew update && brew upgrade punchlist`.
+
+Pushes that leave `VERSION` alone never release. A version whose tag already exists is
+skipped, and one without a changelog section fails before anything is tagged. To release
+the current `VERSION` by hand, run the workflow from the Actions tab
+(`gh workflow run auto-release`).
+
+The tap bump needs a repository secret, `HOMEBREW_TAP_TOKEN`: a fine-grained token with
+Contents read and write on `GiantRavens/homebrew-tap`. Without it the run fails at the
+tap step with that message, after the release exists; add the secret and rerun the job.
+`scripts/release.sh --manual` does the same from your machine when Actions is unavailable.
+
 ---
 
 ## Project

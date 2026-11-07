@@ -117,4 +117,11 @@ pin todo --ticket "title" --body-file -     # body as markdown on stdin
 pin problem <id> --file f.md               # set a section from a file (also approach, section set)
 ```
 
+## Changing punchlist itself
+
+Every change you commit to this repo bumps `VERSION` and adds a `## <version>` section to
+`CHANGELOG.md`: the patch number at minimum, the minor number for a significant feature,
+the major number for an overhaul or a breaking change to task files or commands. A push to
+main that changes `VERSION` releases it to Homebrew automatically (README, "Releasing").
+
 For the full workflow guide, see `docs/assistant-brief.md`.

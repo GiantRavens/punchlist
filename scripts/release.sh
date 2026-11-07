@@ -16,12 +16,31 @@ set -euo pipefail
 # formula bump in one shot.
 #
 #   --dry-run   print every action without tagging, releasing, or pushing.
+#   --manual    release from this machine even though CI normally does it
+#               (.github/workflows/auto-release.yml); use when Actions is down.
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_dir"
 
 dry_run=false
-[[ "${1:-}" == "--dry-run" ]] && dry_run=true
+manual=false
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) dry_run=true ;;
+    --manual) manual=true ;;
+  esac
+done
+
+# Releases normally happen in CI: .github/workflows/auto-release.yml tags,
+# publishes and bumps the tap when a push to main changes VERSION. Running
+# this script as well would race it for the tag. --manual is the fallback
+# for when Actions is unavailable.
+if [[ -f .github/workflows/auto-release.yml ]] && ! $manual && ! $dry_run; then
+  echo "releases run in CI now: bump VERSION, add its CHANGELOG section, commit, git push." >&2
+  echo "watch it with: gh run watch \$(gh run list -w auto-release -L 1 --json databaseId -q '.[0].databaseId')" >&2
+  echo "to release from this machine instead (Actions unavailable): scripts/release.sh --manual" >&2
+  exit 1
+fi
 
 version="$(tr -d '[:space:]' < VERSION)"
 tag="v${version}"

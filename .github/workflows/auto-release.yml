@@ -1,0 +1,133 @@
+name: auto-release
+
+# Release on push: when a push to main changes VERSION, tag that version,
+# publish the GitHub release with binaries, and bump the Homebrew tap so
+# `brew update && brew upgrade punchlist` picks it up.
+#
+# The deliberate act stays human: bump VERSION and add its CHANGELOG section.
+# Everything after the push is here. Pushes that do not change VERSION never
+# release. workflow_dispatch releases the current VERSION by hand (for example
+# the first time, or after fixing a failed run).
+#
+# Needs one repository secret, HOMEBREW_TAP_TOKEN: a fine-grained token with
+# Contents read and write on GiantRavens/homebrew-tap. Without it the run
+# fails at the tap step, loudly, after the release exists; rerun it once the
+# secret is set.
+
+on:
+  push:
+    branches: [main]
+    paths: [VERSION]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: read VERSION and decide
+        id: version
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error file=VERSION::VERSION is '$version', not MAJOR.MINOR.PATCH"
+            exit 1
+          fi
+          tag="v${version}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "::notice::${tag} already exists; nothing to release"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! grep -qx "## ${version}" CHANGELOG.md; then
+            echo "::error file=CHANGELOG.md::no '## ${version}' section; add the changelog entry before releasing"
+            exit 1
+          fi
+          echo "release=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@v5
+        if: steps.version.outputs.release == 'true'
+        with:
+          go-version: "1.24.x"
+          cache: true
+      - name: test
+        if: steps.version.outputs.release == 'true'
+        run: |
+          go test ./...
+          go vet ./...
+      - name: tag and publish the release
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "punchlist ${VERSION}"
+          git push origin "$TAG"
+          # the changelog section for this version is the release body
+          awk -v v="## ${VERSION}" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md > notes.md
+          gh release create "$TAG" --title "punchlist ${VERSION}" --notes-file notes.md --verify-tag
+
+  binaries:
+    needs: tag
+    if: needs.tag.outputs.release == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+
+  tap:
+    needs: [tag, binaries]
+    if: needs.tag.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: require the tap token
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "::error::HOMEBREW_TAP_TOKEN is not set: the release ${{ needs.tag.outputs.tag }} exists, but brew users will not see it until the tap is bumped. Add the secret and rerun this job."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          repository: GiantRavens/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+      - name: bump the formula
+        env:
+          TAG: ${{ needs.tag.outputs.tag }}
+          VERSION: ${{ needs.tag.outputs.version }}
+        run: |
+          url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.tar.gz"
+          sha="$(curl -fsSL --retry 5 --retry-delay 3 "$url" | sha256sum | awk '{print $1}')"
+          [ -n "$sha" ] || { echo "::error::could not checksum $url"; exit 1; }
+          formula=tap/Formula/punchlist.rb
+          perl -pi -e "s|url \".*\"|url \"${url}\"|; s|sha256 \".*\"|sha256 \"${sha}\"|" "$formula"
+          grep -q "url \"${url}\"" "$formula" && grep -q "sha256 \"${sha}\"" "$formula" \
+            || { echo "::error::the formula did not take the new url and sha256"; exit 1; }
+          cd tap
+          if git diff --quiet; then
+            echo "::notice::the formula already points at ${TAG}"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "punchlist ${VERSION}"
+          git push
+          echo "::notice::tap bumped to ${TAG}: brew update && brew upgrade punchlist"
