@@ -58,7 +58,7 @@ func mutatesPunchlist(cmd *cobra.Command) bool {
 		"pin tag", "pin tag set", "pin tag rm", "pin meta", "pin check",
 		"pin acceptance add", "pin acceptance rm", "pin acceptance set",
 		"pin section set", "pin section add", "pin problem", "pin approach",
-		"pin del", "pin compact":
+		"pin del", "pin compact", "pin renumber":
 		return true
 	default:
 		return false

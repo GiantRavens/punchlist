@@ -73,7 +73,7 @@ func findTaskFile(id int) (string, error) {
 		return matches[0], nil
 	default:
 		// nothing enforces id uniqueness across subfolders; refuse to guess
-		return "", fmt.Errorf("task ID %d is ambiguous (%d files): %s", id, len(matches), strings.Join(matches, ", "))
+		return "", fmt.Errorf("task ID %d is ambiguous (%d files): %s; repair with `pin renumber --collisions`", id, len(matches), strings.Join(matches, ", "))
 	}
 }
 

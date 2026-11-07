@@ -164,7 +164,7 @@ func runDoctor(fix bool) (*doctorReport, error) {
 			}
 		}
 		if prev, dup := idsSeen[t.ID]; dup {
-			flag("duplicate_id", "error", fmt.Sprintf("id %d also used by %s", t.ID, prev), false)
+			flag("duplicate_id", "error", fmt.Sprintf("id %d also used by %s (repair: pin renumber --collisions)", t.ID, prev), false)
 		} else {
 			idsSeen[t.ID] = ct.rel
 		}

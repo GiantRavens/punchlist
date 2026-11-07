@@ -86,6 +86,7 @@ Zsh cwd hook snippet (optional, for prompt or env):
 	cmd.AddCommand(newConfigCmd())
 	cmd.AddCommand(newDeleteCmd())
 	cmd.AddCommand(newDoctorCmd())
+	cmd.AddCommand(newRenumberCmd())
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newDeferCmd())
 	cmd.AddCommand(newNotDoCmd())
