@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.10
 - **`pin renumber` repairs duplicate task ids** (pin #49). `pin renumber --collisions` finds every id claimed by more than one task file; in each group the earliest-created task keeps the id and the others move to fresh ids above both `next_id` and the highest id on disk. `pin renumber <task-file>` moves one named file (by path, or bare filename inside this scope's `tasks/`; an ambiguous id cannot name one). Frontmatter and filename change together, the task's `## Log` records old -> new and why, and `--dry-run` prints the plan without changing anything. Why: 1.3.5's disk floor prevents most shared-store collisions, but not when sync is stalled, because neither host can see the other's file. Observed 2026-10-23 in the notebook root, where the Mac's 271 (a DONE log entry, written while Mac Syncthing was down) collided with futhark's 271 (an open ticket), and every by-id command on 271 refused as ambiguous for two weeks. `pin doctor` (`duplicate_id`) and the fleet `pin_scope_integrity` sensor already detected it; this is the repair. The ambiguous-id error and the doctor finding now name the command. It renames first, then rewrites the frontmatter, so an interrupted run leaves an `id_mismatch` that `pin doctor` reports, never a silent second copy. Gated by the write lock.
   - Tests: `cmd/renumber_test.go` (keeps the oldest, log entry, next_id advance, doctor clean afterwards, idempotent second run, dry run changes nothing, named-file form, refused arguments).
 

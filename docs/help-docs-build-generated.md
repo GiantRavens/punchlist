@@ -102,6 +102,7 @@ pin, punchlist
 | `note` | Add a note to a task (or `note ls`/`note rm`) |
 | `pri` | Set or clear the priority on one or more tasks (0 clears) |
 | `problem` | Set the ## Problem section (shortcut for `pin section set <id> Problem`) |
+| `renumber` | Give a task file a fresh id (repairs duplicate ids from synced stores) |
 | `search` | Search tasks by text |
 | `section` | Set or append prose in a task section (Problem, Approach, or any custom heading) |
 | `show` | Show a task in detail |
